@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Don't crawl authenticated pages — they require login
+Disallow: /portfolio
+Disallow: /watchlist
+Disallow: /history
+Disallow: /settings
