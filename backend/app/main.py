@@ -30,6 +30,9 @@ async def lifespan(app: FastAPI):
     warm_task = asyncio.create_task(_warm_screener(), name="screener-warmup")
     warm_task.add_done_callback(_on_task_done)
 
+    overview_task = asyncio.create_task(stocks.warm_overview(), name="overview-warmup")
+    overview_task.add_done_callback(_on_task_done)
+
     if settings.auto_fixer_enabled:
         logger.info("Auto-fixer ENABLED — running every %d hours.", settings.auto_fixer_interval_hours)
         fix_task = asyncio.create_task(_auto_fix_loop(), name="auto-fix-loop")

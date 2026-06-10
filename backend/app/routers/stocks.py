@@ -24,7 +24,7 @@ def _validate_ticker(ticker: str) -> str:
 # In-process response cache for the heavy market-overview endpoint.
 # Without this, every dashboard load triggers fresh yfinance calls for
 # indices + top movers — easily 50+ tickers per request.
-_OVERVIEW_TTL = 60  # seconds
+_OVERVIEW_TTL = 90  # seconds — data older than this triggers a background refresh
 _overview_cache: dict | None = None
 _overview_ts: float = 0.0
 _overview_lock = asyncio.Lock()
@@ -132,35 +132,69 @@ async def screener():
     return StreamingResponse(_ndjson(), media_type="application/x-ndjson")
 
 
-@router.get("/market/overview")
-async def market_overview():
-    """Serve from a 60-second response cache to avoid stampeding yfinance.
+async def _refresh_overview() -> dict:
+    """Fetch fresh overview data and update the cache.
 
-    The async lock makes sure that under cold-cache + N concurrent requests,
-    only ONE upstream fetch runs while the others wait for its result.
+    The lock + freshness re-check guarantee that only ONE upstream yfinance
+    fetch runs even when many callers (or a background refresh) race here.
     """
     global _overview_cache, _overview_ts
-    now = time.time()
-    if _overview_cache and (now - _overview_ts) < _OVERVIEW_TTL:
+    async with _overview_lock:
+        # Another coroutine may have refilled the cache while we waited.
+        if _overview_cache and (time.time() - _overview_ts) < _OVERVIEW_TTL:
+            return _overview_cache
+        indices, gl = await asyncio.gather(
+            market_data.get_market_indices(),
+            market_data.get_gainers_losers(),
+        )
+        _overview_cache = {
+            "indices": indices,
+            "gainers": gl["gainers"],
+            "losers":  gl["losers"],
+        }
+        _overview_ts = time.time()
         return _overview_cache
 
-    async with _overview_lock:
-        # Re-check under the lock — another coroutine may have refilled it.
-        now = time.time()
-        if _overview_cache and (now - _overview_ts) < _OVERVIEW_TTL:
-            return _overview_cache
-        try:
-            indices, gl = await asyncio.gather(
-                market_data.get_market_indices(),
-                market_data.get_gainers_losers(),
-            )
-            _overview_cache = {
-                "indices": indices,
-                "gainers": gl["gainers"],
-                "losers":  gl["losers"],
-            }
-            _overview_ts = time.time()
-            return _overview_cache
-        except Exception:
-            logger.exception("market_overview failed")
-            raise HTTPException(502, "Market data unavailable.")
+
+async def _background_refresh() -> None:
+    try:
+        await _refresh_overview()
+    except Exception as exc:
+        logger.warning("background overview refresh failed: %s", exc)
+
+
+def _spawn_background_refresh() -> None:
+    # If the lock is held a refresh is already running — no need for another.
+    if not _overview_lock.locked():
+        asyncio.create_task(_background_refresh())
+
+
+async def warm_overview() -> None:
+    """Pre-fill the cache at startup so the first dashboard load is instant."""
+    try:
+        logger.info("Warming market-overview cache…")
+        await _refresh_overview()
+        logger.info("Market-overview cache ready.")
+    except Exception as exc:
+        logger.warning("Overview warm-up failed: %s", exc)
+
+
+@router.get("/market/overview")
+async def market_overview():
+    """Stale-while-revalidate.
+
+    If we have any cached data we return it immediately. Once it has aged past
+    the TTL we kick off a background refresh so the *next* caller gets fresh
+    data — the current caller never waits on yfinance. Only a completely cold
+    cache (first request after boot, before warm-up finishes) blocks.
+    """
+    if _overview_cache is not None:
+        if (time.time() - _overview_ts) >= _OVERVIEW_TTL:
+            _spawn_background_refresh()
+        return _overview_cache
+
+    try:
+        return await _refresh_overview()
+    except Exception:
+        logger.exception("market_overview failed")
+        raise HTTPException(502, "Market data unavailable.")
