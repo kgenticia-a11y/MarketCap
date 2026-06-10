@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from datetime import date, timedelta
@@ -132,16 +133,18 @@ async def screener():
     return StreamingResponse(_ndjson(), media_type="application/x-ndjson")
 
 
-async def _refresh_overview() -> dict:
+async def _refresh_overview(force: bool = False) -> dict:
     """Fetch fresh overview data and update the cache.
 
     The lock + freshness re-check guarantee that only ONE upstream yfinance
     fetch runs even when many callers (or a background refresh) race here.
+    Pass ``force=True`` (used by the autonomous refresh loop) to bypass the
+    freshness check and always pull fresh data.
     """
     global _overview_cache, _overview_ts
     async with _overview_lock:
         # Another coroutine may have refilled the cache while we waited.
-        if _overview_cache and (time.time() - _overview_ts) < _OVERVIEW_TTL:
+        if not force and _overview_cache and (time.time() - _overview_ts) < _OVERVIEW_TTL:
             return _overview_cache
         indices, gl = await asyncio.gather(
             market_data.get_market_indices(),
@@ -173,10 +176,40 @@ async def warm_overview() -> None:
     """Pre-fill the cache at startup so the first dashboard load is instant."""
     try:
         logger.info("Warming market-overview cache…")
-        await _refresh_overview()
+        await _refresh_overview(force=True)
         logger.info("Market-overview cache ready.")
     except Exception as exc:
         logger.warning("Overview warm-up failed: %s", exc)
+
+
+# Refresh slightly more often than the cache expires so the payload is never
+# stale and every request hits the fast in-memory path. Override with the
+# OVERVIEW_REFRESH_SECONDS env var.
+_OVERVIEW_REFRESH_INTERVAL = max(
+    15, int(os.getenv("OVERVIEW_REFRESH_SECONDS", "60"))
+)
+
+
+async def refresh_overview_loop() -> None:
+    """Autonomous background loop that keeps the market-overview cache warm.
+
+    Runs for the lifetime of the process. Each tick forces a fresh upstream
+    fetch, so the cached payload is continuously refreshed independent of user
+    traffic — real-time stock data always loads instantly with no cold-fetch
+    delay, even after idle periods. Transient upstream failures are logged and
+    retried on the next tick; the loop never dies on a single error.
+    """
+    logger.info(
+        "Market-overview auto-refresh loop started (every %ds).",
+        _OVERVIEW_REFRESH_INTERVAL,
+    )
+    while True:
+        await asyncio.sleep(_OVERVIEW_REFRESH_INTERVAL)
+        try:
+            await _refresh_overview(force=True)
+            logger.debug("market-overview cache auto-refreshed")
+        except Exception as exc:
+            logger.warning("periodic overview refresh failed: %s", exc)
 
 
 @router.get("/market/overview")
