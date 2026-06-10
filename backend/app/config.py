@@ -32,6 +32,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175"
     )
 
+    # Regex matching allowed origins, in addition to the explicit list above.
+    # Vercel mints a fresh URL on every deploy (e.g.
+    # market-<hash>-<team>.vercel.app), so we match the whole project family
+    # rather than pinning exact URLs that break on the next push. Empty string
+    # disables regex matching.
+    allowed_origin_regex: str = (
+        r"https://market-[a-z0-9-]+-kgenticia-3648s-projects\.vercel\.app"
+    )
+
     # Admin endpoints (auto-fixer trigger, log) require this token in the
     # X-Admin-Token header. If unset, the admin router returns 503.
     admin_token: str = ""
