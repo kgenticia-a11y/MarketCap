@@ -33,6 +33,14 @@ async def lifespan(app: FastAPI):
     overview_task = asyncio.create_task(stocks.warm_overview(), name="overview-warmup")
     overview_task.add_done_callback(_on_task_done)
 
+    # Autonomous loop that keeps the real-time market-overview cache warm so
+    # stock data always loads instantly, regardless of traffic. Cancelled on
+    # shutdown below.
+    overview_refresh_task = asyncio.create_task(
+        stocks.refresh_overview_loop(), name="overview-refresh-loop"
+    )
+    overview_refresh_task.add_done_callback(_on_task_done)
+
     if settings.auto_fixer_enabled:
         logger.info("Auto-fixer ENABLED — running every %d hours.", settings.auto_fixer_interval_hours)
         fix_task = asyncio.create_task(_auto_fix_loop(), name="auto-fix-loop")
@@ -41,6 +49,14 @@ async def lifespan(app: FastAPI):
         logger.info("Auto-fixer disabled (set AUTO_FIXER_ENABLED=true to enable).")
     logger.info("MarketCap API started")
     yield
+
+    # ── Shutdown ──────────────────────────────────────────────────────────
+    overview_refresh_task.cancel()
+    try:
+        await overview_refresh_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("MarketCap API shutting down")
 
 
 async def _warm_screener():
