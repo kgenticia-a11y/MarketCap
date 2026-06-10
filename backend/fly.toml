@@ -9,7 +9,7 @@ primary_region = "iad"   # US East — closest to Supabase aws-1-us-east-2
   dockerfile = "Dockerfile"
 
 [env]
-  WEB_CONCURRENCY = "2"
+  WEB_CONCURRENCY = "1"
   JWT_ALGORITHM   = "HS256"
 
 # Secret env vars (DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS) must be set via:
@@ -43,4 +43,4 @@ primary_region = "iad"   # US East — closest to Supabase aws-1-us-east-2
 
 [[vm]]
   size   = "shared-cpu-1x"
-  memory = "512mb"
+  memory = "1024mb"
