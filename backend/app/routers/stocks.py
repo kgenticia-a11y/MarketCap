@@ -1,12 +1,12 @@
 import asyncio
 import json
 import logging
-import os
 import re
 import time
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from app.config import settings
 from app.services import market_data
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
@@ -159,19 +159,6 @@ async def _refresh_overview(force: bool = False) -> dict:
         return _overview_cache
 
 
-async def _background_refresh() -> None:
-    try:
-        await _refresh_overview()
-    except Exception as exc:
-        logger.warning("background overview refresh failed: %s", exc)
-
-
-def _spawn_background_refresh() -> None:
-    # If the lock is held a refresh is already running — no need for another.
-    if not _overview_lock.locked():
-        asyncio.create_task(_background_refresh())
-
-
 async def warm_overview() -> None:
     """Pre-fill the cache at startup so the first dashboard load is instant."""
     try:
@@ -182,22 +169,20 @@ async def warm_overview() -> None:
         logger.warning("Overview warm-up failed: %s", exc)
 
 
-# Refresh slightly more often than the cache expires so the payload is never
-# stale and every request hits the fast in-memory path. Override with the
-# OVERVIEW_REFRESH_SECONDS env var.
-_OVERVIEW_REFRESH_INTERVAL = max(
-    15, int(os.getenv("OVERVIEW_REFRESH_SECONDS", "60"))
-)
+# Refresh more often than the cache TTL so the payload is never stale and every
+# request hits the fast in-memory path. Configured via OVERVIEW_REFRESH_SECONDS
+# (validated by pydantic); a 15s floor protects yfinance from being hammered.
+_OVERVIEW_REFRESH_INTERVAL = max(15, settings.overview_refresh_seconds)
 
 
 async def refresh_overview_loop() -> None:
     """Autonomous background loop that keeps the market-overview cache warm.
 
-    Runs for the lifetime of the process. Each tick forces a fresh upstream
-    fetch, so the cached payload is continuously refreshed independent of user
-    traffic — real-time stock data always loads instantly with no cold-fetch
-    delay, even after idle periods. Transient upstream failures are logged and
-    retried on the next tick; the loop never dies on a single error.
+    This is the single source of cache freshness: each tick forces a fresh
+    upstream fetch, so the cached payload is continuously refreshed independent
+    of user traffic — real-time stock data always loads instantly with no
+    cold-fetch delay, even after idle periods. Transient upstream failures are
+    logged and retried on the next tick; the loop never dies on a single error.
     """
     logger.info(
         "Market-overview auto-refresh loop started (every %ds).",
@@ -214,16 +199,13 @@ async def refresh_overview_loop() -> None:
 
 @router.get("/market/overview")
 async def market_overview():
-    """Stale-while-revalidate.
+    """Serve the in-memory cache, which ``refresh_overview_loop`` keeps warm.
 
-    If we have any cached data we return it immediately. Once it has aged past
-    the TTL we kick off a background refresh so the *next* caller gets fresh
-    data — the current caller never waits on yfinance. Only a completely cold
-    cache (first request after boot, before warm-up finishes) blocks.
+    Whenever a cached payload exists it is returned immediately — the caller
+    never waits on yfinance. Only a completely cold cache (the first request
+    after boot, before warm-up finishes) blocks on an upstream fetch.
     """
     if _overview_cache is not None:
-        if (time.time() - _overview_ts) >= _OVERVIEW_TTL:
-            _spawn_background_refresh()
         return _overview_cache
 
     try:

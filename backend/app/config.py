@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         r"https://market-[a-z0-9-]+-kgenticia-3648s-projects\.vercel\.app"
     )
 
+    # Seconds between autonomous market-overview cache refreshes. Kept below the
+    # in-process cache TTL so the cached payload is always fresh and every
+    # request hits the fast path. Validated/coerced by pydantic; values below
+    # the 15s floor are clamped at use time.
+    overview_refresh_seconds: int = 60
+
     # Admin endpoints (auto-fixer trigger, log) require this token in the
     # X-Admin-Token header. If unset, the admin router returns 503.
     admin_token: str = ""

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,22 @@ async def lifespan(app: FastAPI):
 
     warm_task = asyncio.create_task(_warm_screener(), name="screener-warmup")
     warm_task.add_done_callback(_on_task_done)
+
+    # The market-overview cache and its refresh loop live in per-process memory,
+    # so the design assumes a single worker. Warn loudly if that's not the case
+    # rather than silently serving divergent caches and N× yfinance load.
+    try:
+        worker_count = int(os.getenv("WEB_CONCURRENCY", "1") or "1")
+    except ValueError:
+        worker_count = 1
+    if worker_count > 1:
+        logger.warning(
+            "WEB_CONCURRENCY=%d but the market-overview cache/refresh loop are "
+            "per-process. Each worker keeps its own cache and hits yfinance "
+            "independently. Run a single worker or move the cache to shared "
+            "storage (e.g. Redis).",
+            worker_count,
+        )
 
     overview_task = asyncio.create_task(stocks.warm_overview(), name="overview-warmup")
     overview_task.add_done_callback(_on_task_done)
