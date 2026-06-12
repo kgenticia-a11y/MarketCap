@@ -9,6 +9,10 @@ primary_region = "iad"   # US East — closest to Supabase aws-1-us-east-2
   dockerfile = "Dockerfile"
 
 [env]
+  # Keep this at 1: the market-overview cache and its auto-refresh loop are
+  # per-process. Multiple workers would each maintain their own cache and hit
+  # yfinance independently (the app logs a warning if WEB_CONCURRENCY > 1).
+  # To scale horizontally, move the cache to shared storage (e.g. Redis) first.
   WEB_CONCURRENCY = "1"
   JWT_ALGORITHM   = "HS256"
 
