@@ -1,14 +1,30 @@
+import re
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from typing import Literal, Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # --- Auth ---
+
+_SPECIAL = re.compile(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>/?\\|`~]')
+
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     accepted_terms: bool = Field(..., description="Must be true — user accepted Terms of Service")
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        """Require at least one uppercase letter, one digit, one special character."""
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number.")
+        if not _SPECIAL.search(v):
+            raise ValueError("Password must contain at least one special character.")
+        return v
 
 
 class UserLogin(BaseModel):
@@ -27,7 +43,9 @@ class UserOut(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
-    name: Optional[str] = Field(None, max_length=100)
+    # Allow letters, numbers, spaces, hyphens, apostrophes, periods — reject
+    # HTML/script-injection characters at the schema boundary.
+    name: Optional[str] = Field(None, max_length=100, pattern=r"^[\w\s\-\.',]+$")
 
 
 class PasswordUpdate(BaseModel):
@@ -79,9 +97,9 @@ class WatchlistItemOut(BaseModel):
 # --- Price Alerts ---
 
 class PriceAlertCreate(BaseModel):
-    ticker:       str   = Field(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
-    target_price: float = Field(..., gt=0)
-    condition:    str   # "above" | "below"
+    ticker:       str                      = Field(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
+    target_price: float                    = Field(..., gt=0)
+    condition:    Literal["above", "below"]
 
 
 class PriceAlertOut(BaseModel):

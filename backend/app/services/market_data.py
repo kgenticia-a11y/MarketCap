@@ -25,6 +25,29 @@ async def _run(fn, *args, **kwargs):
     return await loop.run_in_executor(_pool, lambda: fn(*args, **kwargs))
 
 
+# ── Generic TTL cache helpers ──────────────────────────────────────────────
+# Each cache is a plain dict: key → (value, timestamp).
+# CPython's GIL makes individual dict reads/writes atomic, so these are safe
+# for concurrent asyncio coroutines without an explicit lock.  The worst-case
+# is a brief stampede where two coroutines both miss the cache; the second
+# result simply overwrites the first, which is harmless.
+
+_quote_cache:   dict[str, tuple[dict, float]] = {}
+_details_cache: dict[str, tuple[dict, float]] = {}
+_news_cache:    dict[str, tuple[dict, float]] = {}
+_chart_cache:   dict[str, tuple[dict, float]] = {}
+_update_cache:  tuple[dict, float] | None = None
+_funds_cache:   dict[str, tuple[list, float]] = {}
+
+_QUOTE_TTL   =  30   # seconds — price data refreshes frequently
+_DETAILS_TTL = 300   # 5 min  — company fundamentals rarely change intraday
+_NEWS_TTL    = 300   # 5 min  — news feed doesn't need per-second freshness
+_CHART_1D_TTL  =  60   # 1 min  — intraday candles need to be fairly fresh
+_CHART_TTL     = 300   # 5 min  — daily/weekly/monthly candles
+_UPDATE_TTL  = 300   # 5 min  — market-update sector/breadth data
+_FUNDS_TTL   = 600   # 10 min — fund data changes slowly
+
+
 # ── Quote ──────────────────────────────────────────────────────────────────
 
 def _fetch_quote(ticker: str) -> dict:
@@ -51,7 +74,15 @@ def _fetch_quote(ticker: str) -> dict:
 
 async def get_quote(ticker: str) -> dict:
     """Return a full quote dict: price, previous close, change %, volume, etc."""
-    return await _run(_fetch_quote, ticker.upper())
+    t = ticker.upper()
+    now = time.time()
+    if t in _quote_cache:
+        data, ts = _quote_cache[t]
+        if now - ts < _QUOTE_TTL:
+            return data
+    result = await _run(_fetch_quote, t)
+    _quote_cache[t] = (result, now)
+    return result
 
 
 # ── Chart ──────────────────────────────────────────────────────────────────
@@ -80,7 +111,17 @@ def _fetch_chart(ticker: str, multiplier: int, timespan: str, from_date: str, to
 
 
 async def get_aggregates(ticker: str, multiplier: int, timespan: str, from_date: str, to_date: str) -> dict:
-    return await _run(_fetch_chart, ticker.upper(), multiplier, timespan, from_date, to_date)
+    t = ticker.upper()
+    cache_key = f"{t}:{timespan}:{multiplier}:{from_date}"
+    ttl = _CHART_1D_TTL if timespan == "minute" else _CHART_TTL
+    now = time.time()
+    if cache_key in _chart_cache:
+        data, ts = _chart_cache[cache_key]
+        if now - ts < ttl:
+            return data
+    result = await _run(_fetch_chart, t, multiplier, timespan, from_date, to_date)
+    _chart_cache[cache_key] = (result, now)
+    return result
 
 
 # ── Search ─────────────────────────────────────────────────────────────────
@@ -122,7 +163,15 @@ def _fetch_details(ticker: str) -> dict:
 
 
 async def get_ticker_details(ticker: str) -> dict:
-    return await _run(_fetch_details, ticker.upper())
+    t = ticker.upper()
+    now = time.time()
+    if t in _details_cache:
+        data, ts = _details_cache[t]
+        if now - ts < _DETAILS_TTL:
+            return data
+    result = await _run(_fetch_details, t)
+    _details_cache[t] = (result, now)
+    return result
 
 
 # ── Market Overview ────────────────────────────────────────────────────────
@@ -294,8 +343,16 @@ def _fetch_news_yf(ticker: str | None, limit: int) -> list[dict]:
 
 
 async def get_news(ticker: str = None, limit: int = 10) -> dict:
+    cache_key = ticker.upper() if ticker else "__market__"
+    now = time.time()
+    if cache_key in _news_cache:
+        data, ts = _news_cache[cache_key]
+        if now - ts < _NEWS_TTL:
+            return data
     results = await _run(_fetch_news_yf, ticker, limit)
-    return {"results": results, "status": "OK"}
+    payload = {"results": results, "status": "OK"}
+    _news_cache[cache_key] = (payload, now)
+    return payload
 
 
 # ── Market Update ──────────────────────────────────────────────────────────
@@ -413,7 +470,15 @@ def _fetch_market_update() -> dict:
 
 
 async def get_market_update() -> dict:
-    return await _run(_fetch_market_update)
+    global _update_cache
+    now = time.time()
+    if _update_cache is not None:
+        data, ts = _update_cache
+        if now - ts < _UPDATE_TTL:
+            return data
+    result = await _run(_fetch_market_update)
+    _update_cache = (result, now)
+    return result
 
 
 # ── Mutual Funds / ETF Screener ────────────────────────────────────────────
@@ -475,7 +540,14 @@ async def get_funds(category: str) -> list[dict]:
     tickers = _FUND_CATEGORIES.get(category, [])
     if not tickers:
         return []
-    return await _run(_fetch_fund_category, tickers)
+    now = time.time()
+    if category in _funds_cache:
+        data, ts = _funds_cache[category]
+        if now - ts < _FUNDS_TTL:
+            return data
+    result = await _run(_fetch_fund_category, tickers)
+    _funds_cache[category] = (result, now)
+    return result
 
 
 def get_fund_categories() -> list[str]:

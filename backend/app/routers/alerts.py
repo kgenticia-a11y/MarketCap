@@ -25,8 +25,6 @@ def create_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if body.condition not in ("above", "below"):
-        raise HTTPException(400, "condition must be 'above' or 'below'")
     count = db.query(models.PriceAlert).filter_by(user_id=current_user.id).count()
     if count >= 50:
         raise HTTPException(400, "Maximum of 50 alerts reached. Delete some before adding new ones.")

@@ -16,12 +16,21 @@ export default function Register() {
     e.preventDefault();
     setError("");
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!/[A-Z]/.test(password)) { setError("Password must contain at least one uppercase letter."); return; }
+    if (!/\d/.test(password)) { setError("Password must contain at least one number."); return; }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) { setError("Password must contain at least one special character."); return; }
     if (!acceptedTerms) { setError("You must agree to the Terms of Service."); return; }
     setLoading(true);
     try { await register(email, password, acceptedTerms); navigate("/"); }
     catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg ?? "Registration failed.");
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const retryAfter = (err as { retryAfterSeconds?: number })?.retryAfterSeconds;
+      if (status === 429) {
+        setError(`Too many attempts. Please wait ${retryAfter ?? 60} seconds and try again.`);
+      } else {
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        setError(msg ?? "Registration failed.");
+      }
     } finally { setLoading(false); }
   };
 

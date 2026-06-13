@@ -19,7 +19,15 @@ export default function Login() {
     setError("");
     setLoading(true);
     try { await login(email, password); navigate(from, { replace: true }); }
-    catch { setError("Invalid email or password."); }
+    catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const retryAfter = (err as { retryAfterSeconds?: number })?.retryAfterSeconds;
+      if (status === 429) {
+        setError(`Too many attempts. Please wait ${retryAfter ?? 60} seconds and try again.`);
+      } else {
+        setError("Invalid email or password.");
+      }
+    }
     finally { setLoading(false); }
   };
 

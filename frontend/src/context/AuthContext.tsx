@@ -25,17 +25,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) { setLoading(false); return; }
     getMe()
       .then(setUser)
-      .catch(() => localStorage.removeItem("token"))
+      .catch(() => sessionStorage.removeItem("token"))
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string) => {
     const { access_token } = await apiLogin(email, password);
-    localStorage.setItem("token", access_token);
+    sessionStorage.setItem("token", access_token);
     try {
       const me = await getMe();
       setUser(me);
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Only discard the token if the server explicitly rejected it (401).
       // A transient network error should not silently log the user out.
       if ((err as { response?: { status?: number } })?.response?.status === 401) {
-        localStorage.removeItem("token");
+        sessionStorage.removeItem("token");
       }
       throw new Error("Failed to load user profile");
     }
@@ -51,21 +51,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (email: string, password: string, acceptedTerms: boolean) => {
     const { access_token } = await apiRegister(email, password, acceptedTerms);
-    localStorage.setItem("token", access_token);
+    sessionStorage.setItem("token", access_token);
     try {
       const me = await getMe();
       setUser(me);
     } catch (err) {
       // Same as login: only remove token on explicit 401, not network errors.
       if ((err as { response?: { status?: number } })?.response?.status === 401) {
-        localStorage.removeItem("token");
+        sessionStorage.removeItem("token");
       }
       throw new Error("Failed to load user profile");
     }
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     setUser(null);
   };
 

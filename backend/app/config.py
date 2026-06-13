@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     database_url: str
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 1440
+    jwt_expire_minutes: int = 60
 
     # ── Process / resource limits ─────────────────────────────────────────
     # Number of uvicorn worker processes. Default 1 for SQLite (file lock
