@@ -110,7 +110,16 @@ async def _auto_fix_loop():
             logger.error("[auto_fixer] Scheduled run failed: %s", exc)
 
 
-app = FastAPI(title="MarketCap API", lifespan=lifespan)
+app = FastAPI(
+    title="MarketCap API",
+    lifespan=lifespan,
+    # Hide the interactive API docs and raw schema in production — they expose
+    # every endpoint, parameter, and schema to unauthenticated visitors.
+    # Set IS_PRODUCTION=true via Fly secret to activate this.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,

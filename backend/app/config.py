@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     auto_fixer_enabled: bool = False
     auto_fixer_interval_hours: int = 5
 
+    # Set IS_PRODUCTION=true in production (Fly secrets / Vercel env).
+    # Disables /docs, /redoc, /openapi.json so the full API schema is never
+    # publicly exposed on the live server.
+    is_production: bool = False
+
     class Config:
         env_file = ".env"
         extra = "ignore"   # silently ignore leftover keys
@@ -65,6 +70,18 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def _jwt_algorithm_allowlist(cls, v: str) -> str:
+        """Reject dangerous JWT algorithm values (none, RS256 misuse, etc.)."""
+        allowed = {"HS256", "HS384", "HS512"}
+        if v not in allowed:
+            raise ValueError(
+                f"JWT_ALGORITHM must be one of {sorted(allowed)}. "
+                "The 'none' algorithm and asymmetric algorithms are not permitted."
+            )
+        return v
 
     @field_validator("jwt_secret")
     @classmethod

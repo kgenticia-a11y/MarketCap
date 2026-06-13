@@ -34,7 +34,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_error
     except JWTError:
         raise credentials_error
-    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    # Guard against float strings ("1.5"), negative values, and ints that
+    # exceed Postgres integer range — all raise ValueError or produce a DB error
+    # rather than the expected 401 if left unhandled.
+    try:
+        uid = int(user_id)
+        if uid <= 0 or uid > 2_147_483_647:  # Postgres INTEGER max
+            raise ValueError
+    except (ValueError, TypeError):
+        raise credentials_error
+    user = db.query(models.User).filter(models.User.id == uid).first()
     if user is None:
         raise credentials_error
     return user

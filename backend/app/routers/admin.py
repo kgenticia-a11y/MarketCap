@@ -10,6 +10,7 @@ GET  /admin/auto-fix/log      Return the tail of auto_fix.log as plain text
 GET  /admin/auto-fix/status   Return next scheduled run + last run summary
 """
 
+import logging
 import secrets
 from typing import Optional
 
@@ -18,6 +19,8 @@ from fastapi.responses import PlainTextResponse
 
 from app.config import settings
 from app.services.auto_fixer import run_auto_fixer, read_log
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -51,8 +54,11 @@ async def trigger_auto_fix():
         summary = await run_auto_fixer()
         _last_run = summary
         return summary
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception:
+        # Log full detail server-side; never send raw exception strings to callers —
+        # they may contain filesystem paths, OS errors, or internal tool output.
+        logger.exception("admin-triggered auto-fix run failed")
+        raise HTTPException(status_code=500, detail="Auto-fix run failed. Check server logs.")
 
 
 @router.get("/auto-fix/log", response_class=PlainTextResponse,

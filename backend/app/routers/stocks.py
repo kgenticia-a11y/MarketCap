@@ -128,8 +128,11 @@ async def screener():
         try:
             async for stock in market_data.stream_screener():
                 yield json.dumps(stock) + "\n"
-        except Exception as e:
-            yield json.dumps({"error": str(e)}) + "\n"
+        except Exception:
+            # Never send raw exception strings — they may contain internal paths
+            # or upstream error messages. Log server-side and send a generic error.
+            logger.exception("screener stream failed mid-stream")
+            yield json.dumps({"error": "Data temporarily unavailable."}) + "\n"
     return StreamingResponse(_ndjson(), media_type="application/x-ndjson")
 
 

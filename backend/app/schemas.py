@@ -13,7 +13,7 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., max_length=128)  # cap matches UserRegister; prevents oversized bcrypt input
 
 
 class UserOut(BaseModel):
@@ -31,7 +31,7 @@ class ProfileUpdate(BaseModel):
 
 
 class PasswordUpdate(BaseModel):
-    current_password: str
+    current_password: str = Field(..., max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
