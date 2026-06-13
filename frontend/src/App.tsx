@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Stock from "./pages/Stock";
@@ -19,44 +20,44 @@ import FeedbackPage from "./pages/Feedback";
 import Screener from "./pages/Screener";
 import Terms from "./pages/Terms";
 
+/** Shorthand: wraps a page in both ProtectedRoute and Layout */
+function Private({ title, fullHeight, children }: {
+  title: string;
+  fullHeight?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <ProtectedRoute>
+      <Layout title={title} fullHeight={fullHeight}>
+        {children}
+      </Layout>
+    </ProtectedRoute>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={
-        <Layout title="Dashboard">
-          <Home />
-        </Layout>
-      } />
-      <Route path="/chart" element={
-        <Layout title="Interactive Chart" fullHeight>
-          <InteractiveChart />
-        </Layout>
-      } />
-      <Route path="/stock/:ticker" element={
-        <Layout title="Stock Detail">
-          <Stock />
-        </Layout>
-      } />
-      <Route path="/portfolio" element={
-        <Layout title="Portfolio">
-          <Portfolio />
-        </Layout>
-      } />
-      <Route path="/watchlist" element={
-        <Layout title="Watchlist">
-          <Watchlist />
-        </Layout>
-      } />
-      <Route path="/market"   element={<Layout title="Market Update"><MarketUpdate /></Layout>} />
-      <Route path="/income"   element={<Layout title="Income Estimator"><IncomeEstimator /></Layout>} />
-      <Route path="/funds"    element={<Layout title="Mutual Funds"><MutualFunds /></Layout>} />
-      <Route path="/settings" element={<Layout title="Settings"><Settings /></Layout>} />
-      <Route path="/history"  element={<Layout title="History"><History /></Layout>} />
-      <Route path="/news"     element={<Layout title="News"><NewsPage /></Layout>} />
-      <Route path="/feedback" element={<Layout title="Feedback"><FeedbackPage /></Layout>} />
-      <Route path="/screener" element={<Layout title="Stock Screener"><Screener /></Layout>} />
-      <Route path="/login"    element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      {/* ── Protected: requires sign-in ─────────────────────────────── */}
+      <Route path="/"         element={<Private title="Dashboard"><Home /></Private>} />
+      <Route path="/chart"    element={<Private title="Interactive Chart" fullHeight><InteractiveChart /></Private>} />
+      <Route path="/stock/:ticker" element={<Private title="Stock Detail"><Stock /></Private>} />
+      <Route path="/portfolio" element={<Private title="Portfolio"><Portfolio /></Private>} />
+      <Route path="/watchlist" element={<Private title="Watchlist"><Watchlist /></Private>} />
+      <Route path="/market"   element={<Private title="Market Update"><MarketUpdate /></Private>} />
+      <Route path="/income"   element={<Private title="Income Estimator"><IncomeEstimator /></Private>} />
+      <Route path="/funds"    element={<Private title="Mutual Funds"><MutualFunds /></Private>} />
+      <Route path="/settings" element={<Private title="Settings"><Settings /></Private>} />
+      <Route path="/history"  element={<Private title="History"><History /></Private>} />
+      <Route path="/news"     element={<Private title="News"><NewsPage /></Private>} />
+      <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
+      <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
+
+      {/* ── Public: redirect to dashboard if already signed in ───────── */}
+      <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+
+      {/* ── Always public ────────────────────────────────────────────── */}
       <Route path="/terms"    element={<Terms />} />
       <Route path="*"         element={<NotFound />} />
     </Routes>

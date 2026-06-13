@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CandlestickChart, ExternalLink } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -10,12 +10,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Send user back to the page they were trying to reach, or dashboard
+  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    try { await login(email, password); navigate("/"); }
+    try { await login(email, password); navigate(from, { replace: true }); }
     catch { setError("Invalid email or password."); }
     finally { setLoading(false); }
   };
