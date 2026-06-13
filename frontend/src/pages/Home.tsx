@@ -113,7 +113,7 @@ export default function Home() {
                   <span className="text-sm font-semibold text-white">{g.ticker}</span>
                   <div className="text-right">
                     <div className="text-xs text-white">${g.price.toFixed(2)}</div>
-                    <div className="text-xs text-positive">+{g.change_pct.toFixed(2)}%</div>
+                    <div className="text-xs text-positive">{g.change_pct > 0 ? "+" : ""}{g.change_pct.toFixed(2)}%</div>
                   </div>
                 </button>
               ))}

@@ -90,7 +90,11 @@ class Feedback(Base):
     __tablename__ = "feedback"
 
     id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # ondelete="SET NULL" lets the DB automatically nullify this column when the
+    # referenced user is deleted, as a safety net in addition to the manual
+    # anonymisation UPDATE in auth.delete_account (which must run first, in the
+    # same transaction, to preserve the existing behaviour).
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     rating     = Column(Integer, nullable=False)          # 1-5
     category   = Column(String,  nullable=False)          # Bug / Feature / General
     message    = Column(String,  nullable=False)

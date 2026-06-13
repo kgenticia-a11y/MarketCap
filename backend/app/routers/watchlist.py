@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.database import get_db
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
+
+# Reusable path validator — same charset as the stock router's _TICKER_RE.
+_TICKER_PATH = Path(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
 
 
 @router.get("", response_model=list[schemas.WatchlistItemOut])
@@ -16,7 +19,7 @@ def get_watchlist(
 
 @router.post("/{ticker}", response_model=schemas.WatchlistItemOut, status_code=201)
 def add_to_watchlist(
-    ticker: str,
+    ticker: str = _TICKER_PATH,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -35,7 +38,7 @@ def add_to_watchlist(
 
 @router.delete("/{ticker}", status_code=204)
 def remove_from_watchlist(
-    ticker: str,
+    ticker: str = _TICKER_PATH,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):

@@ -83,10 +83,16 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
     def _client_ip(self, request: Request) -> str:
-        # Honour X-Forwarded-For when behind a proxy / load balancer.
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",")[0].strip()
+        # Fly.io injects Fly-Client-IP with the real client IP and it cannot
+        # be spoofed by the client (Fly strips any client-supplied header with
+        # this name before forwarding). Prefer it over X-Forwarded-For, which
+        # clients CAN spoof by prepending values to bypass rate limiting.
+        fly_ip = request.headers.get("fly-client-ip")
+        if fly_ip:
+            return fly_ip.strip()
+        # Outside Fly (local dev, other proxies): fall back to the direct
+        # connection address. Do NOT trust the first XFF value — it is
+        # client-controlled and trivially spoofed.
         return request.client.host if request.client else "unknown"
 
     def _matching_rule(self, method: str, path: str):

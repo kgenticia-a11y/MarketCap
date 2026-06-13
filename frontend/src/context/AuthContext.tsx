@@ -39,8 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await getMe();
       setUser(me);
-    } catch {
-      localStorage.removeItem("token");
+    } catch (err) {
+      // Only discard the token if the server explicitly rejected it (401).
+      // A transient network error should not silently log the user out.
+      if ((err as { response?: { status?: number } })?.response?.status === 401) {
+        localStorage.removeItem("token");
+      }
       throw new Error("Failed to load user profile");
     }
   };
@@ -51,8 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await getMe();
       setUser(me);
-    } catch {
-      localStorage.removeItem("token");
+    } catch (err) {
+      // Same as login: only remove token on explicit 401, not network errors.
+      if ((err as { response?: { status?: number } })?.response?.status === 401) {
+        localStorage.removeItem("token");
+      }
       throw new Error("Failed to load user profile");
     }
   };

@@ -1,6 +1,7 @@
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.database import get_db
@@ -49,7 +50,10 @@ async def get_analytics(
     for h in holdings:
         h["allocation_pct"] = round(h["value"] / total_value * 100, 2) if total_value > 0 else 0
 
-    # Upsert today's value snapshot
+    # Upsert today's value snapshot — guarded against TOCTOU: two concurrent
+    # analytics requests on the same day could both see no existing snapshot
+    # and both try to INSERT, hitting the UniqueConstraint. Catch the resulting
+    # IntegrityError and fall back to an UPDATE on the row that won the race.
     today = date_type.today().isoformat()
     snap = db.query(models.PortfolioSnapshot).filter_by(
         portfolio_id=portfolio.id, date=today
@@ -57,14 +61,27 @@ async def get_analytics(
     if snap:
         snap.total_value = round(total_value, 2)
         snap.total_cost  = round(total_cost,  2)
+        db.commit()
     else:
-        db.add(models.PortfolioSnapshot(
-            portfolio_id=portfolio.id,
-            date=today,
-            total_value=round(total_value, 2),
-            total_cost=round(total_cost,  2),
-        ))
-    db.commit()
+        try:
+            db.add(models.PortfolioSnapshot(
+                portfolio_id=portfolio.id,
+                date=today,
+                total_value=round(total_value, 2),
+                total_cost=round(total_cost,  2),
+            ))
+            db.commit()
+        except IntegrityError:
+            # Another concurrent request inserted the row first — roll back
+            # the failed INSERT and update the winner's row instead.
+            db.rollback()
+            snap = db.query(models.PortfolioSnapshot).filter_by(
+                portfolio_id=portfolio.id, date=today
+            ).first()
+            if snap:
+                snap.total_value = round(total_value, 2)
+                snap.total_cost  = round(total_cost,  2)
+                db.commit()
 
     snapshots = (
         db.query(models.PortfolioSnapshot)
@@ -108,10 +125,13 @@ def add_item(
         .first()
     )
     if existing:
-        # Update shares and recalculate average
+        # Update shares and recalculate weighted-average buy price.
         total_cost = existing.shares * existing.avg_buy_price + body.shares * body.avg_buy_price
-        existing.shares += body.shares
-        existing.avg_buy_price = round(total_cost / existing.shares, 4)
+        new_shares = existing.shares + body.shares
+        if new_shares <= 0:
+            raise HTTPException(400, "Resulting share count must be positive.")
+        existing.shares = new_shares
+        existing.avg_buy_price = round(total_cost / new_shares, 4)
         db.commit()
         db.refresh(existing)
         return existing

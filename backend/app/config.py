@@ -26,10 +26,12 @@ class Settings(BaseSettings):
 
     # Comma-separated list of allowed CORS origins.
     # Example: "https://app.example.com,https://www.example.com"
-    # Defaults cover local dev only.
+    # Defaults cover local dev + the production custom domain.
+    # Override via ALLOWED_ORIGINS env var / Fly secret in production.
     allowed_origins: str = (
         "http://localhost:5173,http://localhost:5174,http://localhost:5175,"
-        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175"
+        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,"
+        "https://marketcap.ksystems.live"
     )
 
     # Regex matching allowed origins, in addition to the explicit list above.

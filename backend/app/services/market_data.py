@@ -533,19 +533,23 @@ _SCREENER_UNIVERSE = [
 
 _screener_data: list = []
 _screener_ts: float = 0.0
+_screener_fetching: bool = False   # sentinel: True while a fetch is in progress
 _screener_lock = threading.Lock()
 _SCREENER_TTL = 600  # 10 minutes
 
 
 def _fetch_screener() -> list[dict]:
-    global _screener_data, _screener_ts
+    global _screener_data, _screener_ts, _screener_fetching
 
     now = time.time()
     with _screener_lock:
         if _screener_data and (now - _screener_ts) < _SCREENER_TTL:
             return _screener_data
-        # Pin timestamp before leaving the lock so concurrent threads serve the
-        # existing (possibly stale) cache instead of launching parallel fetches.
+        # If another thread/coroutine is already fetching, return the stale
+        # cache immediately rather than launching a duplicate fetch.
+        if _screener_fetching:
+            return _screener_data
+        _screener_fetching = True
         _screener_ts = now
 
     tickers = _SCREENER_UNIVERSE
@@ -615,6 +619,7 @@ def _fetch_screener() -> list[dict]:
     with _screener_lock:
         _screener_data = results
         _screener_ts   = time.time()  # record actual completion time
+        _screener_fetching = False
     return results
 
 
@@ -676,15 +681,34 @@ async def stream_screener():
     Cache hit  : all stocks yielded immediately (< 100 ms).
     Cache miss : each stock yielded as soon as its yfinance call completes,
                  so the first rows appear within ~1-2 s instead of ~10 s.
+
+    Stampede guard: if _fetch_screener (called via get_screener) is already
+    fetching, serve the stale cache immediately rather than launching a second
+    parallel fetch. The _screener_fetching sentinel is the shared signal.
     """
-    global _screener_data, _screener_ts
-    now = time.time()
-    with _screener_lock:
-        if _screener_data and (now - _screener_ts) < _SCREENER_TTL:
-            for stock in _screener_data:
-                yield stock
-            return
-        _screener_ts = now  # prevent stampede while we fetch
+    global _screener_data, _screener_ts, _screener_fetching
+    # Move the lock check off the event loop onto a thread to avoid blocking
+    # the loop if the threading.Lock is briefly contended.
+    loop = asyncio.get_running_loop()
+
+    def _check_cache():
+        now = time.time()
+        with _screener_lock:
+            if _screener_data and (now - _screener_ts) < _SCREENER_TTL:
+                return "hit", list(_screener_data)
+            if _screener_fetching:
+                # Another fetch is in progress — return stale data to this caller.
+                return "stale", list(_screener_data)
+            # Claim the fetch slot.
+            _screener_fetching = True  # noqa: PLW0603
+            return "miss", []
+
+    status, cached = await loop.run_in_executor(_pool, _check_cache)
+
+    if status in ("hit", "stale"):
+        for stock in cached:
+            yield stock
+        return
 
     tickers = _SCREENER_UNIVERSE
     loop = asyncio.get_running_loop()
@@ -747,8 +771,9 @@ async def stream_screener():
             collected.append(item)
             yield item
 
-    # Persist sorted cache for the next request
+    # Persist sorted cache for the next request and release the fetch slot.
     collected.sort(key=lambda x: x["market_cap"], reverse=True)
     with _screener_lock:
         _screener_data = collected
         _screener_ts   = time.time()
+        _screener_fetching = False
