@@ -19,14 +19,91 @@ from app.services.auto_fixer import run_auto_fixer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Process-liveness flag. Flipped True the moment the ASGI app finishes booting,
+# regardless of whether the database is reachable. The liveness probe
+# (/health/live) reads this so a DB outage NEVER makes the orchestrator think
+# the process is dead and trigger a restart loop. Readiness (/health) is a
+# separate, DB-dependent check used only for traffic routing / monitoring.
+_process_alive = False
+
+# Set True once Base.metadata.create_all has succeeded at least once. Until
+# then, a background task keeps retrying so the app self-heals when the DB
+# comes back, instead of crashing at boot.
+_schema_ready = False
+
+
+async def _ensure_schema(max_attempts: int = 5) -> bool:
+    """Create tables, retrying with exponential backoff.
+
+    Returns True on success. Never raises — a persistent failure is logged and
+    the caller decides whether to keep the process alive (it does).
+    `create_all` is idempotent (checkfirst=True), so retrying is always safe.
+    """
+    global _schema_ready
+    delay = 1.0
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await asyncio.to_thread(Base.metadata.create_all, bind=engine)
+            _schema_ready = True
+            logger.info("Database schema ready (attempt %d).", attempt)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Schema init attempt %d/%d failed: %s", attempt, max_attempts, exc
+            )
+            if attempt < max_attempts:
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30)  # cap backoff at 30s
+    return False
+
+
+async def _schema_retry_loop() -> None:
+    """Keep retrying schema init forever until it succeeds, then exit.
+
+    Spawned only when the initial bounded retry fails. This is what makes a
+    cold DB (or a credential rotation that's mid-propagation) self-heal: the
+    web process stays up serving 503s on data endpoints, and the instant the
+    DB becomes reachable this loop creates the schema and flips _schema_ready.
+    """
+    while not _schema_ready:
+        await asyncio.sleep(15)
+        logger.info("[schema-retry] Retrying database schema init…")
+        if await _ensure_schema(max_attempts=1):
+            logger.info("[schema-retry] Database recovered — schema is ready.")
+            return
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    global _process_alive
+
+    # Resilient startup: try to init the schema, but NEVER let a DB failure
+    # crash the boot. If the DB is unreachable we still come up (degraded) and
+    # a background loop self-heals when it returns. This is the guardrail that
+    # turns a transient DB/credential issue from a permanent outage (Fly gives
+    # up after 10 crash-restarts) into a recoverable degraded state.
+    # Keep the boot attempt short (≈3s worst case: delays 1s+2s) so uvicorn
+    # opens the port well within Fly's health-check grace period. Longer
+    # outages are handled by the background _schema_retry_loop below.
+    if not await _ensure_schema(max_attempts=3):
+        logger.error(
+            "Database unreachable at startup — booting in DEGRADED mode. "
+            "Data endpoints will return 503 until the DB recovers; the process "
+            "stays alive and self-heals. Liveness=OK, Readiness=DOWN."
+        )
+
+    _process_alive = True
 
     def _on_task_done(t: asyncio.Task) -> None:
         if not t.cancelled() and (exc := t.exception()):
             logger.error("Background task '%s' raised an unhandled exception: %s", t.get_name(), exc)
+
+    # If the DB was unreachable at boot, keep retrying in the background so the
+    # process self-heals the moment the DB returns. Cancelled on shutdown.
+    schema_retry_task: asyncio.Task | None = None
+    if not _schema_ready:
+        schema_retry_task = asyncio.create_task(_schema_retry_loop(), name="schema-retry-loop")
+        schema_retry_task.add_done_callback(_on_task_done)
 
     warm_task = asyncio.create_task(_warm_screener(), name="screener-warmup")
     warm_task.add_done_callback(_on_task_done)
@@ -68,11 +145,16 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────
-    overview_refresh_task.cancel()
-    try:
-        await overview_refresh_task
-    except asyncio.CancelledError:
-        pass
+    _shutdown_tasks = [overview_refresh_task]
+    if schema_retry_task is not None:
+        _shutdown_tasks.append(schema_retry_task)
+    for t in _shutdown_tasks:
+        t.cancel()
+    for t in _shutdown_tasks:
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
     logger.info("MarketCap API shutting down")
 
 
@@ -164,16 +246,32 @@ app.include_router(admin.router)
 
 
 
+@app.get("/health/live")
+def health_live():
+    """LIVENESS probe — is the process up? Never touches the DB.
+
+    Point your orchestrator's *restart* trigger (Fly http_checks, k8s
+    livenessProbe) HERE. Because it never depends on the database, a DB
+    outage can no longer make the platform conclude the process is dead and
+    crash-restart it into oblivion. As long as the ASGI app booted, this is
+    200 — the process can stay alive and self-heal.
+    """
+    if not _process_alive:
+        return JSONResponse(status_code=503, content={"status": "starting"})
+    return JSONResponse(status_code=200, content={"status": "alive"})
+
+
 @app.get("/health")
 def health():
-    """Liveness + readiness probe. Verifies the DB connection is alive.
+    """READINESS probe — can we actually serve data? Pings the DB.
 
-    Container orchestrators (k8s, Fly, Render, etc.) should hit this on a
-    short interval. A failed DB check returns 503 so the platform won't
-    route traffic to a half-broken instance.
+    Use this for *traffic routing* (k8s readinessProbe), uptime monitors, and
+    humans. A failed DB check returns 503 + schema status so callers can see
+    whether we're in the self-healing degraded state. A failing readiness
+    check must NOT be wired to restart the machine — that's what /health/live
+    is for.
     """
     db_ok = True
-    db_error = None
     try:
         db = SessionLocal()
         try:
@@ -182,9 +280,12 @@ def health():
             db.close()
     except Exception as exc:
         db_ok = False
-        db_error = str(exc)
         logger.warning("Health check DB ping failed: %s", exc)
 
-    payload = {"status": "ok" if db_ok else "degraded", "database": "ok" if db_ok else "down"}
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "database": "ok" if db_ok else "down",
+        "schema_ready": _schema_ready,
+    }
     status_code = 200 if db_ok else 503
     return JSONResponse(status_code=status_code, content=payload)

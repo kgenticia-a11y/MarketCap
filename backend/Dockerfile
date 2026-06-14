@@ -29,9 +29,12 @@ USER appuser
 
 EXPOSE 8000
 
-# Container-level healthcheck — re-uses our /health endpoint which pings the DB.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health > /dev/null || exit 1
+# Container-level healthcheck — uses the LIVENESS endpoint (no DB dependency)
+# so a transient database outage doesn't mark the container unhealthy and
+# trigger a restart loop. The process self-heals; readiness is tracked
+# separately via /health.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health/live > /dev/null || exit 1
 
 # uvicorn picks up WEB_CONCURRENCY automatically; shell form so $WEB_CONCURRENCY expands.
 CMD uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1} --proxy-headers --forwarded-allow-ips='*'

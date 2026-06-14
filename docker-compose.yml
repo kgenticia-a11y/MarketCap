@@ -4,12 +4,13 @@ services:
     env_file: ./backend/.env
     ports:
       - "8000:8000"
+    # Liveness check (no DB dependency) so a DB blip doesn't flap the container.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     restart: unless-stopped
 
   frontend:

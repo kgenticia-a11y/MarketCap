@@ -3,6 +3,147 @@
 This document captures the known limitations of the current architecture so you
 can plan around them when scaling horizontally.
 
+---
+
+# 🚨 RUNBOOK — "The site is down"
+
+## Platform dependency chain
+
+A request flows through five independently-owned platforms. Any one breaking
+takes down some or all of the site:
+
+```
+User
+ │  DNS: marketcap.kystems.live  ── managed by LOVABLE (registrar: Name.com)
+ ▼
+Vercel  ── serves the React frontend (per-deploy URLs + custom domain)
+ │  HTTPS calls to VITE_API_URL
+ ▼
+Fly.io  ── runs the FastAPI backend (app: marketcap-backend)
+ │  DATABASE_URL (Supabase pooler, port 5432)
+ ▼
+Supabase Postgres  ── all user data (RLS enabled)
+ │
+ └─ yfinance / Yahoo Finance  ── market data (no key; flaky upstream)
+```
+
+## First triage — find the broken layer (60 seconds)
+
+Run these top-down; the first one that fails is your layer:
+
+```bash
+# 1. DNS resolves?  (Lovable → Vercel)
+dig +short marketcap.kystems.live          # blank/NXDOMAIN = DNS not configured
+
+# 2. Frontend up?   (Vercel)
+curl -I https://marketcap.kystems.live     # expect 200/3xx
+
+# 3. Backend alive?  (Fly process)
+curl -s https://marketcap-backend.fly.dev/health/live   # {"status":"alive"} = process OK
+
+# 4. Backend ready?  (Fly + Supabase DB)
+curl -s https://marketcap-backend.fly.dev/health        # "database":"ok" = DB reachable
+```
+
+| Symptom | Broken layer | Go to |
+|---|---|---|
+| `dig` is blank / NXDOMAIN | DNS (Lovable) | §A |
+| DNS resolves, site won't load | Vercel | §B |
+| `/health/live` fails or times out | Fly process down | §C |
+| `/health/live` OK but `/health` 503 | Supabase DB / credentials | §D |
+| Site loads, prices missing | yfinance upstream | §E |
+
+---
+
+### §A — DNS not resolving (Lovable / Name.com)
+
+`marketcap.kystems.live` is registered through **Lovable**; DNS is edited in the
+Lovable dashboard, not Name.com directly. Needed record:
+
+| Type | Host | Value |
+|---|---|---|
+| CNAME | `marketcap` | `cname.vercel-dns.com` |
+
+After adding, propagation is 1–30 min. Verify: `dig @8.8.8.8 +short marketcap.kystems.live`.
+Cross-check Vercel's expectation: `npx vercel domains inspect kystems.live`.
+
+### §B — Frontend down (Vercel)
+
+```bash
+npx vercel ls                       # is the latest Production deploy ● Ready?
+npx vercel inspect <deploy-url>     # build logs
+```
+Rollback: redeploy a known-good commit, or `npx vercel rollback`.
+Note: a bad `VITE_API_URL` env at build time points the app at the wrong backend —
+check Vercel project env vars.
+
+### §C — Backend process down (Fly)  ← the outage we hardened against
+
+```bash
+fly status  --app marketcap-backend
+fly logs    --app marketcap-backend
+```
+The app now **boots in degraded mode even if the DB is unreachable** (see
+"Resilient startup" below), so a DB problem should NOT kill the process anymore.
+If `/health/live` is still failing, it's a real process/deploy fault:
+- Look for a Python traceback in `fly logs` (bad import, syntax error, OOM).
+- `fly apps restart marketcap-backend` to force a fresh machine.
+- Roll back: `fly releases --app marketcap-backend` then `fly deploy --image <prev>`.
+
+### §D — DB unreachable / auth failed (Supabase)  ← what took us down once
+
+Symptom in logs: `password authentication failed` or `connection refused`.
+**Most common cause: a rotated Supabase password not propagated to Fly.**
+
+NEVER set `DATABASE_URL` blind. Use the guarded setter, which tests the
+connection first and only pushes to Fly if it works:
+
+```bash
+cd backend
+./scripts/set-database-url.sh 'postgresql+psycopg2://postgres.<ref>:<NEWPASS>@aws-1-us-east-2.pooler.supabase.com:5432/postgres'
+```
+
+Also update `backend/.env` to match (local dev + preflight use it). Other causes:
+Supabase project paused (free tier) → resume in dashboard; pooler maxed →
+check Supabase → Database → Connection pooling.
+
+### §E — Market data missing (yfinance)
+
+Yahoo rate-limits / delists symbols intermittently. The backend already caches
+(30s–10min TTLs) and degrades gracefully (returns 502 on a single endpoint, not
+a crash). Usually self-resolves. If persistent, lower `YF_POOL_SIZE`.
+
+---
+
+## Deploy safely (every time)
+
+```bash
+cd backend
+./scripts/preflight.py        # validates env + live DB SELECT 1 before anything
+./scripts/deploy.sh           # preflight, then fly deploy
+```
+
+Preflight is the gate that turns "deploy a broken credential → crash loop" into
+"deploy blocked locally, nothing changes in prod."
+
+## Resilient startup (why a DB blip no longer = outage)
+
+`app/main.py` was changed so the backend **never crashes at boot when the DB is
+down**:
+- Schema init retries with backoff; on persistent failure the app still starts
+  (degraded) and a background loop self-heals the moment the DB returns.
+- `/health/live` (liveness, no DB) drives Fly's restart decision → a DB outage
+  can't crash-loop the machine to death (the previous failure: "max restart
+  count of 10 → machine dead").
+- `/health` (readiness, pings DB) only controls traffic routing + monitoring.
+
+Before: rotated password → boot crash → 10 Fly restarts → permanent outage,
+manual redeploy required.
+After: rotated password → degraded mode, 503 on data endpoints, **auto-recovers**
+when `DATABASE_URL` is fixed; the process never dies.
+
+---
+
 ## Single-process state
 
 The following pieces of state live in **Python module memory** and do not

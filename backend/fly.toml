@@ -39,11 +39,33 @@ primary_region = "iad"   # US East — closest to Supabase aws-1-us-east-2
     hard_limit = 250
     soft_limit = 200
 
+  # LIVENESS check — drives Fly's restart decision. Points at /health/live,
+  # which never touches the database. This is the guardrail that stops a DB
+  # outage from crash-looping the machine: as long as the process is up this
+  # returns 200, so Fly keeps the (self-healing) instance alive instead of
+  # restarting it to death. The 30s grace covers the brief bounded schema
+  # retry at boot.
   [[services.http_checks]]
     interval     = 10000
     timeout      = 5000
-    grace_period = "10s"
+    grace_period = "30s"
+    path         = "/health/live"
+
+  # READINESS check — informs traffic routing only, does not restart the VM.
+  # Reflects real DB health so a degraded instance is drained while it heals.
+  [[services.http_checks]]
+    interval     = 15000
+    timeout      = 5000
+    grace_period = "20s"
     path         = "/health"
+
+# Restart policy: keep restarting on genuine process crashes, but because the
+# app now boots successfully even when the DB is down (degraded mode), a
+# DB/credential problem no longer counts as a crash and won't burn the restart
+# budget. 'on-failure' only triggers on a non-zero exit.
+[[restart]]
+  policy      = "on-failure"
+  max_retries = 10
 
 [[vm]]
   size   = "shared-cpu-1x"
