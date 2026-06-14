@@ -197,7 +197,7 @@ _UNIVERSE = [
     # Extended core
     "IBM", "C", "F", "GM", "INTU", "LMT", "RTX", "MDLZ", "PM", "BKNG",
     # New additions
-    "SHOP", "SQ", "ZM", "UBER", "LYFT", "COIN", "ROKU", "SPOT", "TWLO", "OKTA", "DOCU",
+    "SHOP", "XYZ", "ZM", "UBER", "LYFT", "COIN", "ROKU", "SPOT", "TWLO", "OKTA", "DOCU",
     "SPGI", "MCO", "MSCI", "NDAQ", "TROW", "FISV", "FIS", "ADP", "BRK-B",
     "MRNA", "VRTX", "HUM", "CI", "ELV", "ABT", "ZTS",
     "LULU", "TJX", "DG", "DLTR", "AZO", "ORLY", "KR",
@@ -387,7 +387,7 @@ _EXTENDED_UNIVERSE = [
     "MDLZ", "PM", "STZ", "MO",
     "DOW", "NUE", "SPG", "SO", "D",
     # New additions
-    "SHOP", "SQ", "ZM", "COIN", "ROKU", "SPOT", "TWLO", "OKTA", "DOCU",
+    "SHOP", "XYZ", "ZM", "COIN", "ROKU", "SPOT", "TWLO", "OKTA", "DOCU",
     "SPGI", "MCO", "MSCI", "NDAQ", "TROW", "FISV", "FIS", "ADP", "BRK-B",
     "MRNA", "VRTX", "HUM", "CI", "ELV", "ABT", "ZTS",
     "LULU", "TJX", "DG", "DLTR", "AZO", "ORLY", "KR",
@@ -561,7 +561,7 @@ _SCREENER_UNIVERSE = [
     "AAPL", "MSFT", "NVDA", "AMD", "INTC", "CSCO", "ORCL", "CRM", "ADBE", "QCOM",
     "TXN", "AMAT", "AVGO", "MU", "IBM", "INTU", "NOW", "SNOW", "PLTR", "CRWD",
     "PANW", "NET", "ZS", "FTNT", "DDOG", "TEAM", "MDB", "HPQ", "DELL",
-    "SHOP", "SQ", "ZM", "UBER", "LYFT", "TWLO", "OKTA", "DOCU", "ADI", "LRCX", "KLAC",
+    "SHOP", "XYZ", "ZM", "UBER", "LYFT", "TWLO", "OKTA", "DOCU", "ADI", "LRCX", "KLAC",
     # Financials (28)
     "JPM", "GS", "BAC", "WFC", "MS", "V", "MA", "PYPL", "AXP", "BLK",
     "C", "USB", "PNC", "COF", "SCHW", "ICE", "CME", "TFC",
@@ -764,6 +764,10 @@ async def stream_screener():
     loop = asyncio.get_running_loop()
 
     def _check_cache():
+        # Must declare global here: assigning _screener_fetching = True below
+        # would otherwise make Python treat it as a local variable in this nested
+        # function, causing UnboundLocalError when we read it first.
+        global _screener_fetching
         now = time.time()
         with _screener_lock:
             if _screener_data and (now - _screener_ts) < _SCREENER_TTL:
@@ -772,7 +776,7 @@ async def stream_screener():
                 # Another fetch is in progress — return stale data to this caller.
                 return "stale", list(_screener_data)
             # Claim the fetch slot.
-            _screener_fetching = True  # noqa: PLW0603
+            _screener_fetching = True
             return "miss", []
 
     status, cached = await loop.run_in_executor(_pool, _check_cache)
@@ -837,15 +841,19 @@ async def stream_screener():
         _pool.submit(_fetch_one, t)
 
     collected: list[dict] = []
-    for _ in tickers:
-        item = await queue.get()
-        if item is not None:
-            collected.append(item)
-            yield item
-
-    # Persist sorted cache for the next request and release the fetch slot.
-    collected.sort(key=lambda x: x["market_cap"], reverse=True)
-    with _screener_lock:
-        _screener_data = collected
-        _screener_ts   = time.time()
-        _screener_fetching = False
+    try:
+        for _ in tickers:
+            item = await queue.get()
+            if item is not None:
+                collected.append(item)
+                yield item
+    finally:
+        # Always release the sentinel — even if the generator is closed early
+        # (client disconnects, exception mid-stream) so future requests don't
+        # get permanently stuck in "fetching" mode and return empty results.
+        collected.sort(key=lambda x: x["market_cap"], reverse=True)
+        with _screener_lock:
+            if collected:  # only overwrite cache if we got something useful
+                _screener_data = collected
+                _screener_ts   = time.time()
+            _screener_fetching = False
