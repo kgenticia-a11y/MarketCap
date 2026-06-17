@@ -8,5 +8,27 @@ export const addToPortfolio = (ticker: string, shares: number, avg_buy_price: nu
 export const removeFromPortfolio = (ticker: string) =>
   client.delete(`/portfolio/items/${ticker}`);
 
+export const updatePortfolioItem = (ticker: string, shares: number, avg_buy_price: number) =>
+  client.patch(`/portfolio/items/${ticker}`, { ticker, shares, avg_buy_price }).then((r) => r.data);
+
 export const getPortfolioAnalytics = () =>
   client.get("/portfolio/analytics").then((r) => r.data);
+
+export interface RiskProfile {
+  horizon: string;
+  tolerance: string;
+  goal: string;
+}
+
+export const analyzePortfolio = (
+  holdings: object[],
+  riskProfile: RiskProfile | null,
+  totalValue: number,
+  totalPnlPct: number,
+) =>
+  client.post("/portfolio/analyze", {
+    holdings,
+    risk_profile: riskProfile,
+    total_value: totalValue,
+    total_pnl_pct: totalPnlPct,
+  }).then((r) => r.data);

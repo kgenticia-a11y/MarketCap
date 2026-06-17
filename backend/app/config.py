@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Max request body size (bytes). Default 1 MB — anything larger gets 413.
     max_body_bytes: int = 1_048_576
     # Thread pool size for blocking yfinance calls.
-    yf_pool_size: int = 6
+    yf_pool_size: int = 16
 
     # ── Database pool (Postgres / MySQL only — SQLite ignores) ────────────
     db_pool_size:    int = 10
@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Disables /docs, /redoc, /openapi.json so the full API schema is never
     # publicly exposed on the live server.
     is_production: bool = False
+
+    # Anthropic API key for AI portfolio analysis.
+    anthropic_api_key: str = ""
 
     class Config:
         env_file = ".env"
