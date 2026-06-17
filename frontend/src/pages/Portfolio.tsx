@@ -3,8 +3,9 @@ import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/rea
 import { Link } from "react-router-dom";
 import {
   getPortfolio, removeFromPortfolio, getPortfolioAnalytics,
-  addToPortfolio, updatePortfolioItem, analyzePortfolio, RiskProfile,
+  addToPortfolio, updatePortfolioItem, analyzePortfolio,
 } from "../api/portfolio";
+import type { RiskProfile } from "../api/portfolio";
 import { getQuote } from "../api/stocks";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -283,7 +284,8 @@ function AllocationPie({ data, title }: { data: Array<{ name: string; value: num
             {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
           </Pie>
           <Tooltip contentStyle={tooltipStyle}
-            formatter={(_v: unknown, _n: unknown, p: { payload: { pct: number; name: string } }) =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            formatter={(_v: any, _n: any, p: any) =>
               [`${p.payload.pct.toFixed(1)}%`, p.payload.name]} />
         </PieChart>
         <div className="flex-1 space-y-1.5 min-w-0">
@@ -334,7 +336,7 @@ function GeoExposure({ holdings }: { holdings: Holding[] }) {
           <YAxis type="category" dataKey="name"
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             axisLine={false} tickLine={false} width={90} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`]} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`${v}%`]} />
           <Bar dataKey="value" radius={4}>
             {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
           </Bar>
@@ -369,7 +371,7 @@ function TopHoldingsBar({ holdings }: { holdings: Holding[] }) {
           <XAxis dataKey="name" tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false}
             tickFormatter={v => `${v}%`} width={38} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`, "Weight"]} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`${v}%`, "Weight"]} />
           <Bar dataKey="value" radius={[4, 4, 0, 0]}>
             {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
           </Bar>
@@ -525,8 +527,8 @@ function PnlHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
             tickFormatter={v => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString()}`} width={68} />
           <ReferenceLine y={0} stroke={gridColor} strokeDasharray="4 4" />
           <Tooltip contentStyle={tooltipStyle}
-            formatter={(v: number) => [`${v >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(v))}`, "P&L"]}
-            labelFormatter={(d: string) => fmtDate(d)} />
+            formatter={(v: any) => [`${v >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(v))}`, "P&L"]}
+            labelFormatter={(d: any) => fmtDate(d)} />
           <Area type="monotone" dataKey="pnl" stroke={lineColor} strokeWidth={2}
             fill="url(#pnlGrad)" dot={chartData.length <= 14} activeDot={{ r: 4 }} />
         </AreaChart>
