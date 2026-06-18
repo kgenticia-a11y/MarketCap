@@ -1,14 +1,19 @@
+import asyncio
+import json
+import logging
 from datetime import date as date_type
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.config import settings
 from app.database import get_db
 from app.services import market_data
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -169,7 +174,7 @@ def remove_item(
 
 
 class AnalyzeRequest(BaseModel):
-    holdings: list[dict[str, Any]]
+    holdings: list[dict[str, Any]] = Field(max_length=100)
     risk_profile: dict[str, str] | None = None
     total_value: float = 0
     total_pnl_pct: float = 0
@@ -228,16 +233,25 @@ Respond in the following JSON structure (no markdown, pure JSON):
   "beginner_explanation": "Plain-language paragraph suitable for a first-time investor explaining the portfolio's current state and what they should know"
 }}"""
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    aclient = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    try:
+        message = await aclient.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        logger.error("Anthropic API call failed: %s", exc)
+        raise HTTPException(502, "AI analysis request failed.")
 
-    import json
-    text = message.content[0].text.strip()
-    # Strip markdown code fences if present
+    if not message.content:
+        raise HTTPException(502, "AI returned an empty response.")
+
+    text_block = next((b for b in message.content if b.type == "text"), None)
+    if not text_block:
+        raise HTTPException(502, "AI returned no text content.")
+
+    text = text_block.text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:

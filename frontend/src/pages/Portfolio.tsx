@@ -312,6 +312,7 @@ function GeoExposure({ holdings }: { holdings: Holding[] }) {
     borderRadius: 8, color: theme === "light" ? "#0f172a" : "#e2e8f0", fontSize: 12,
   };
   const totalVal = holdings.reduce((s, h) => s + h.value, 0);
+  if (!totalVal) return null;
   let intl = 0;
   let us = 0;
   holdings.forEach(h => {
@@ -537,12 +538,9 @@ function PnlHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
   );
 }
 
-/* ── Performers panel ──────────────────────────────────────────────────── */
-function PerformersPanel({ holdings }: { holdings: Holding[] }) {
-  const sorted = [...holdings].sort((a, b) => b.pnl_pct - a.pnl_pct);
-  const best = sorted.slice(0, 3);
-  const worst = [...sorted].reverse().slice(0, 3);
-  const HoldingList = ({ items, label }: { items: Holding[]; label: string }) => (
+/* ── Holding list (hoisted to module scope to avoid remount on every render) */
+function HoldingList({ items, label }: { items: Holding[]; label: string }) {
+  return (
     <div className="bg-surface rounded-xl border border-border p-4">
       <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-3">{label}</p>
       <div className="space-y-1">
@@ -566,6 +564,13 @@ function PerformersPanel({ holdings }: { holdings: Holding[] }) {
       </div>
     </div>
   );
+}
+
+/* ── Performers panel ──────────────────────────────────────────────────── */
+function PerformersPanel({ holdings }: { holdings: Holding[] }) {
+  const sorted = [...holdings].sort((a, b) => b.pnl_pct - a.pnl_pct);
+  const best = sorted.slice(0, 3);
+  const worst = [...sorted].reverse().slice(0, 3);
   return (
     <div className="grid grid-cols-2 gap-4">
       <HoldingList items={best} label="Top Performers" />
@@ -602,8 +607,15 @@ function AIAnalysisPanel({
     try {
       const result = await analyzePortfolio(holdings, riskProfile, totalValue, totalPnlPct);
       setAnalysis(result);
-    } catch {
-      setError("AI analysis failed. Please try again.");
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 503) {
+        setError("AI analysis is not configured on this server. Contact your administrator.");
+      } else if (status === 502) {
+        setError("AI service returned an error. Please try again later.");
+      } else {
+        setError("AI analysis failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -866,7 +878,15 @@ function PortfolioRow({ item }: { item: PortfolioItem }) {
         <td className="py-2 px-4" />
         <td className="py-2 px-5 text-right">
           <div className="flex items-center justify-end gap-2">
-            <button onClick={() => editMut.mutate()} disabled={editMut.isPending} className="text-positive hover:text-positive/80"><Check size={14} /></button>
+            <button onClick={() => {
+              const s = parseFloat(editShares);
+              const p = parseFloat(editPrice);
+              if (!isFinite(s) || s <= 0 || !isFinite(p) || p <= 0) {
+                toast.error("Shares and price must be positive numbers.");
+                return;
+              }
+              editMut.mutate();
+            }} disabled={editMut.isPending} className="text-positive hover:text-positive/80"><Check size={14} /></button>
             <button onClick={() => setEditing(false)} className="text-muted hover:text-white"><X size={14} /></button>
           </div>
         </td>
@@ -910,7 +930,7 @@ function PortfolioSummary({ items }: { items: PortfolioItem[] }) {
     queries: items.map(item => ({
       queryKey: ["quote", item.ticker],
       queryFn: () => getQuote(item.ticker),
-      staleTime: 30_000, refetchInterval: 30_000,
+      staleTime: 60_000, refetchInterval: 60_000,
     })),
   });
   const quotes = items.map((item, i) => ({ item, price: (results[i].data?.price as number) ?? item.avg_buy_price }));
