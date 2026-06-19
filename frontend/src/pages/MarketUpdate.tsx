@@ -292,7 +292,7 @@ function EarningsTab() {
     staleTime: 60_000,
   });
 
-  const { data: portfolio } = useQuery<{ ticker: string }[]>({
+  const { data: portfolioData } = useQuery<{ items?: { ticker: string }[] }>({
     queryKey: ["portfolio"],
     queryFn:  getPortfolio,
     staleTime: 60_000,
@@ -308,7 +308,7 @@ function EarningsTab() {
   });
 
   const watchlistTickers = new Set((watchlist ?? []).map((w) => w.ticker));
-  const portfolioTickers = new Set((portfolio ?? []).map((p) => p.ticker));
+  const portfolioTickers = new Set((portfolioData?.items ?? []).map((p) => p.ticker));
 
   function filterCompanies(companies: EarningsCompany[]): EarningsCompany[] {
     if (filter === "watchlist") return companies.filter((c) => watchlistTickers.has(c.ticker));
