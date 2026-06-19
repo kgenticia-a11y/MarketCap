@@ -18,6 +18,7 @@ import Settings from "./pages/Settings";
 import MutualFunds from "./pages/MutualFunds";
 import FeedbackPage from "./pages/Feedback";
 import Screener from "./pages/Screener";
+import Alerts from "./pages/Alerts";
 import Terms from "./pages/Terms";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
@@ -52,6 +53,7 @@ function AppRoutes() {
       <Route path="/news"     element={<Private title="News"><NewsPage /></Private>} />
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
+      <Route path="/alerts"   element={<Private title="Alerts"><Alerts /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}
       <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />

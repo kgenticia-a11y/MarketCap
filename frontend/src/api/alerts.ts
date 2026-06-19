@@ -6,6 +6,7 @@ export interface Alert {
   target_price: number;
   condition:    "above" | "below";
   created_at:   string;
+  triggered_at: string | null;
 }
 
 export const getAlerts   = ()                                             =>
