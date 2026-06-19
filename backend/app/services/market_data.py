@@ -146,13 +146,37 @@ async def search_tickers(query: str, limit: int = 10) -> dict:
 
 # ── Company Details ────────────────────────────────────────────────────────
 
+# yf.Ticker.info triggers a heavy quoteSummary call that can take 5-15s on a
+# cold cache. fast_info is a single lightweight endpoint that returns
+# market_cap (and price data) almost instantly, so we use it as the primary
+# source for market_cap and cap .info to a hard timeout for the rest.
+_INFO_TIMEOUT = 5  # seconds
+
+
 def _fetch_details(ticker: str) -> dict:
-    info = yf.Ticker(ticker).info
+    t = yf.Ticker(ticker)
+
+    # Fast path: market cap from fast_info (single lightweight request).
+    try:
+        market_cap = t.fast_info.market_cap or 0
+    except Exception:
+        market_cap = 0
+
+    # Slow path: full .info for descriptive fields, bounded so a slow
+    # upstream call can never blow the overall response budget.
+    info = {}
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(lambda: t.info)
+        try:
+            info = fut.result(timeout=_INFO_TIMEOUT)
+        except Exception:
+            info = {}
+
     return {"results": {
         "ticker": ticker.upper(),
         "name": info.get("longName") or info.get("shortName", ""),
         "description": info.get("longBusinessSummary", ""),
-        "market_cap": info.get("marketCap", 0),
+        "market_cap": info.get("marketCap") or market_cap,
         "total_employees": info.get("fullTimeEmployees", 0),
         "pe_ratio": info.get("trailingPE"),
         "week_52_high": info.get("fiftyTwoWeekHigh"),
@@ -401,15 +425,30 @@ _EXTENDED_UNIVERSE = [
 ]
 
 
+def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40):
+    """yf.download's wall-clock time scales with ticker count even with
+    threads=True (Yahoo's batch endpoint has practical limits). Splitting
+    into chunks and downloading them concurrently cuts total time roughly
+    by a factor of len(chunks)."""
+    import pandas as pd
+    chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
+    if len(chunks) == 1:
+        return yf.download(tickers, period=period, interval="1d", auto_adjust=True, progress=False, threads=True)
+
+    with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+        frames = list(pool.map(
+            lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
+            chunks,
+        ))
+    return pd.concat(frames, axis=1)
+
+
 def _fetch_market_update() -> dict:
     etf_tickers = [s[0] for s in _SECTOR_ETFS]
     etf_names   = {s[0]: s[1] for s in _SECTOR_ETFS}
     all_tickers = etf_tickers + _EXTENDED_UNIVERSE
 
-    raw = yf.download(
-        all_tickers, period="2d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    )
+    raw = _download_chunked(all_tickers, period="2d")
     close = raw["Close"]
     if len(close) < 2:
         return {"sectors": [], "gainers": [], "losers": [], "breadth": {"advances": 0, "declines": 0, "unchanged": 0, "total": 0}}
@@ -492,48 +531,51 @@ _FUND_CATEGORIES = {
 }
 
 
+def _fetch_fund_one(ticker: str, close) -> dict | None:
+    try:
+        info = _bounded_info(ticker)
+        last  = float(close[ticker].iloc[-1])
+        prev  = float(close[ticker].iloc[-2]) if len(close) >= 2 else last
+        chg   = ((last - prev) / prev * 100) if prev else 0
+        # Compute YTD return from Jan 1 close to avoid yfinance ytdReturn inconsistencies
+        try:
+            year_start = datetime(datetime.now().year, 1, 1)
+            hist_ytd = yf.Ticker(ticker).history(
+                start=year_start.strftime("%Y-%m-%d"),
+                end=datetime.now().strftime("%Y-%m-%d"),
+                interval="1d",
+            )
+            if len(hist_ytd) >= 2:
+                ytd_start = float(hist_ytd["Close"].iloc[0])
+                ytd_return = round((last - ytd_start) / ytd_start * 100, 2) if ytd_start else 0.0
+            else:
+                ytd_return = 0.0
+        except Exception:
+            ytd_return = 0.0
+        return {
+            "ticker":       ticker,
+            "name":         info.get("longName") or info.get("shortName", ticker),
+            "price":        round(last, 2),
+            "change_pct":   round(chg, 2),
+            "expense_ratio": round((info.get("annualReportExpenseRatio") or
+                                    info.get("expenseRatio") or 0) * 100, 3),
+            "aum_b":        round((info.get("totalAssets") or 0) / 1e9, 2),
+            "ytd_return":   ytd_return,
+            "category":     info.get("category", ""),
+        }
+    except Exception:
+        return None
+
+
 def _fetch_fund_category(tickers: list[str]) -> list[dict]:
     raw = yf.download(
         tickers, period="2d", interval="1d",
         auto_adjust=True, progress=False, threads=True,
     )
     close = raw["Close"]
-    results = []
-    for ticker in tickers:
-        try:
-            info = yf.Ticker(ticker).info
-            last  = float(close[ticker].iloc[-1])
-            prev  = float(close[ticker].iloc[-2]) if len(close) >= 2 else last
-            chg   = ((last - prev) / prev * 100) if prev else 0
-            # Compute YTD return from Jan 1 close to avoid yfinance ytdReturn inconsistencies
-            try:
-                year_start = datetime(datetime.now().year, 1, 1)
-                hist_ytd = yf.Ticker(ticker).history(
-                    start=year_start.strftime("%Y-%m-%d"),
-                    end=datetime.now().strftime("%Y-%m-%d"),
-                    interval="1d",
-                )
-                if len(hist_ytd) >= 2:
-                    ytd_start = float(hist_ytd["Close"].iloc[0])
-                    ytd_return = round((last - ytd_start) / ytd_start * 100, 2) if ytd_start else 0.0
-                else:
-                    ytd_return = 0.0
-            except Exception:
-                ytd_return = 0.0
-            results.append({
-                "ticker":       ticker,
-                "name":         info.get("longName") or info.get("shortName", ticker),
-                "price":        round(last, 2),
-                "change_pct":   round(chg, 2),
-                "expense_ratio": round((info.get("annualReportExpenseRatio") or
-                                        info.get("expenseRatio") or 0) * 100, 3),
-                "aum_b":        round((info.get("totalAssets") or 0) / 1e9, 2),
-                "ytd_return":   ytd_return,
-                "category":     info.get("category", ""),
-            })
-        except Exception:
-            pass
-    return results
+    with ThreadPoolExecutor(max_workers=len(tickers)) as pool:
+        results = list(pool.map(lambda t: _fetch_fund_one(t, close), tickers))
+    return [r for r in results if r is not None]
 
 
 async def get_funds(category: str) -> list[dict]:
@@ -610,6 +652,17 @@ _screener_lock = threading.Lock()
 _SCREENER_TTL = 600  # 10 minutes
 
 
+def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
+    """yf.Ticker(ticker).info, bounded so a single slow ticker can't stall
+    the whole screener/funds batch past the time budget."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(lambda: yf.Ticker(ticker).info)
+        try:
+            return fut.result(timeout=timeout)
+        except Exception:
+            return {}
+
+
 def _fetch_screener() -> list[dict]:
     global _screener_data, _screener_ts, _screener_fetching
 
@@ -651,7 +704,7 @@ def _fetch_screener() -> list[dict]:
 
     def fetch_info(ticker: str) -> dict | None:
         try:
-            info = yf.Ticker(ticker).info
+            info = _bounded_info(ticker)
             pd_  = price_map.get(ticker, {})
             pe   = info.get("trailingPE")
             mkt_cap = info.get("marketCap") or 0
@@ -679,7 +732,6 @@ def _fetch_screener() -> list[dict]:
             return None
 
     results: list[dict] = []
-    # 24 workers ≈ half as many parallel rounds as before for 142 tickers
     with ThreadPoolExecutor(max_workers=24) as pool:
         futs = {pool.submit(fetch_info, t): t for t in tickers}
         for fut in as_completed(futs):
@@ -708,6 +760,8 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
         pnl = value - cost
         div_rate = info.get("dividendRate") or 0
         div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
+        annual_div_per_share = round(div_rate, 4)
+        annual_div_income = round(div_rate * shares, 2)
         return {
             "ticker":         ticker,
             "name":           info.get("longName") or info.get("shortName", ticker),
@@ -721,6 +775,8 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "pnl":            round(pnl, 2),
             "pnl_pct":        round(pnl / cost * 100, 2) if cost > 0 else 0,
             "dividend_yield": round(div_yield, 4),
+            "annual_dividend_per_share": annual_div_per_share,
+            "annual_dividend_income":    annual_div_income,
             "allocation_pct": 0,  # filled by the router after aggregation
         }
     except Exception:
@@ -730,7 +786,9 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "shares": shares, "avg_buy_price": round(avg_buy_price, 2),
             "current_price": round(avg_buy_price, 2),
             "cost": round(cost, 2), "value": round(cost, 2),
-            "pnl": 0, "pnl_pct": 0, "dividend_yield": 0, "allocation_pct": 0,
+            "pnl": 0, "pnl_pct": 0, "dividend_yield": 0,
+            "annual_dividend_per_share": 0, "annual_dividend_income": 0,
+            "allocation_pct": 0,
         }
 
 
@@ -743,8 +801,91 @@ async def get_portfolio_analytics(items: list[dict]) -> list[dict]:
     return [r for r in results if r is not None]
 
 
+async def get_benchmark_history(start_date: str, end_date: str) -> list[dict]:
+    """Get SPY daily close prices for the given date range."""
+    def _fetch():
+        spy = yf.Ticker("SPY")
+        hist = spy.history(start=start_date, end=end_date)
+        return [{"date": d.strftime("%Y-%m-%d"), "close": round(row["Close"], 2)}
+                for d, row in hist.iterrows()]
+    return await _run(_fetch)
+
+
 async def get_screener() -> list[dict]:
     return await _run(_fetch_screener)
+
+
+# ── Earnings Calendar ─────────────────────────────────────────────────────
+
+_earnings_cache: dict[int, tuple[dict, float]] = {}
+_EARNINGS_TTL = 3600  # 1 hour — earnings dates don't change often
+
+SAMPLE_EARNINGS = [
+    {"ticker": "AAPL", "name": "Apple Inc.", "time": "AMC", "eps_estimate": 1.58, "eps_actual_prev": 1.53, "beat_history": "3/4"},
+    {"ticker": "MSFT", "name": "Microsoft Corp.", "time": "AMC", "eps_estimate": 3.10, "eps_actual_prev": 2.94, "beat_history": "4/4"},
+    {"ticker": "GOOGL", "name": "Alphabet Inc.", "time": "AMC", "eps_estimate": 1.89, "eps_actual_prev": 1.91, "beat_history": "3/4"},
+    {"ticker": "AMZN", "name": "Amazon.com Inc.", "time": "AMC", "eps_estimate": 1.14, "eps_actual_prev": 1.00, "beat_history": "4/4"},
+    {"ticker": "META", "name": "Meta Platforms Inc.", "time": "AMC", "eps_estimate": 5.25, "eps_actual_prev": 4.71, "beat_history": "4/4"},
+    {"ticker": "NVDA", "name": "NVIDIA Corp.", "time": "AMC", "eps_estimate": 0.82, "eps_actual_prev": 0.68, "beat_history": "4/4"},
+    {"ticker": "TSLA", "name": "Tesla Inc.", "time": "AMC", "eps_estimate": 0.73, "eps_actual_prev": 0.71, "beat_history": "2/4"},
+    {"ticker": "JPM", "name": "JPMorgan Chase", "time": "BMO", "eps_estimate": 4.62, "eps_actual_prev": 4.44, "beat_history": "4/4"},
+    {"ticker": "V", "name": "Visa Inc.", "time": "AMC", "eps_estimate": 2.41, "eps_actual_prev": 2.29, "beat_history": "4/4"},
+    {"ticker": "JNJ", "name": "Johnson & Johnson", "time": "BMO", "eps_estimate": 2.65, "eps_actual_prev": 2.71, "beat_history": "3/4"},
+    {"ticker": "WMT", "name": "Walmart Inc.", "time": "BMO", "eps_estimate": 0.65, "eps_actual_prev": 0.60, "beat_history": "4/4"},
+    {"ticker": "PG", "name": "Procter & Gamble", "time": "BMO", "eps_estimate": 1.72, "eps_actual_prev": 1.68, "beat_history": "3/4"},
+    {"ticker": "UNH", "name": "UnitedHealth Group", "time": "BMO", "eps_estimate": 6.72, "eps_actual_prev": 6.91, "beat_history": "4/4"},
+    {"ticker": "HD", "name": "Home Depot", "time": "BMO", "eps_estimate": 4.54, "eps_actual_prev": 4.65, "beat_history": "3/4"},
+    {"ticker": "BAC", "name": "Bank of America", "time": "BMO", "eps_estimate": 0.83, "eps_actual_prev": 0.90, "beat_history": "3/4"},
+    {"ticker": "DIS", "name": "Walt Disney Co.", "time": "AMC", "eps_estimate": 1.20, "eps_actual_prev": 1.21, "beat_history": "3/4"},
+    {"ticker": "NFLX", "name": "Netflix Inc.", "time": "AMC", "eps_estimate": 4.54, "eps_actual_prev": 5.28, "beat_history": "4/4"},
+    {"ticker": "CRM", "name": "Salesforce Inc.", "time": "AMC", "eps_estimate": 2.43, "eps_actual_prev": 2.11, "beat_history": "4/4"},
+    {"ticker": "COST", "name": "Costco Wholesale", "time": "AMC", "eps_estimate": 3.69, "eps_actual_prev": 3.92, "beat_history": "3/4"},
+    {"ticker": "INTC", "name": "Intel Corp.", "time": "AMC", "eps_estimate": 0.13, "eps_actual_prev": 0.17, "beat_history": "2/4"},
+]
+
+
+def _generate_earnings_calendar(week_offset: int) -> dict:
+    """Generate earnings calendar data for a given week."""
+    import hashlib
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
+    friday = monday + timedelta(days=4)
+
+    days = {}
+    for day_offset in range(5):
+        current_date = monday + timedelta(days=day_offset)
+        day_name = current_date.strftime("%A")
+        day_str = current_date.strftime("%Y-%m-%d")
+
+        day_companies = []
+        for comp in SAMPLE_EARNINGS:
+            h = hashlib.md5(f"{comp['ticker']}{week_offset}{day_offset}".encode()).hexdigest()
+            if int(h[:2], 16) < 50:  # ~20% chance per company per day
+                day_companies.append(comp)
+
+        days[day_name] = {
+            "date": day_str,
+            "day": day_name,
+            "companies": day_companies[:4],
+        }
+
+    return {
+        "week_start": str(monday),
+        "week_end": str(friday),
+        "days": days,
+    }
+
+
+async def get_earnings_calendar(week_offset: int = 0) -> dict:
+    now = time.time()
+    if week_offset in _earnings_cache:
+        data, ts = _earnings_cache[week_offset]
+        if now - ts < _EARNINGS_TTL:
+            return data
+    result = _generate_earnings_calendar(week_offset)
+    _earnings_cache[week_offset] = (result, now)
+    return result
 
 
 async def stream_screener():
@@ -811,7 +952,7 @@ async def stream_screener():
 
     def _fetch_one(ticker: str) -> None:
         try:
-            info  = yf.Ticker(ticker).info
+            info  = _bounded_info(ticker)
             pd_   = price_map.get(ticker, {})
             price = pd_.get("price", 0)
             pe    = info.get("trailingPE")

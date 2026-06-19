@@ -6,9 +6,10 @@ import { getWatchlist, removeFromWatchlist } from "../api/watchlist";
 import { getQuote, getChart } from "../api/stocks";
 import { addToPortfolio } from "../api/portfolio";
 import { useAuth } from "../context/AuthContext";
-import { Trash2, Star, Plus, X } from "lucide-react";
+import { Trash2, Star, Plus, X, Bell } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
+import AlertModal from "../components/AlertModal";
 
 interface WatchItem { id: number; ticker: string }
 
@@ -129,9 +130,10 @@ function PortModal({ ticker, currentPrice, onClose }: PortModalProps) {
 interface WatchRowProps {
   item: WatchItem;
   onAddToPortfolio: (ticker: string, price: number) => void;
+  onCreateAlert: (ticker: string) => void;
 }
 
-function WatchRow({ item, onAddToPortfolio }: WatchRowProps) {
+function WatchRow({ item, onAddToPortfolio, onCreateAlert }: WatchRowProps) {
   const qc = useQueryClient();
 
   const { data: quote } = useQuery({
@@ -202,6 +204,13 @@ function WatchRow({ item, onAddToPortfolio }: WatchRowProps) {
           <Plus size={13} />
         </button>
         <button
+          title="Create alert"
+          onClick={() => onCreateAlert(item.ticker)}
+          className="p-1.5 rounded-lg text-muted hover:text-amber-400 hover:bg-amber-400/10 transition-colors"
+        >
+          <Bell size={13} />
+        </button>
+        <button
           title="Remove from watchlist"
           onClick={() => delMutation.mutate()}
           className="p-1.5 rounded-lg text-muted hover:text-negative hover:bg-negative/10 transition-colors"
@@ -223,9 +232,12 @@ export default function Watchlist() {
     enabled:  !!user,
   });
 
-  // modal state lives here so only one modal exists in the DOM
+  // portfolio modal state
   const [modalTicker, setModalTicker] = useState<string | null>(null);
   const [modalPrice,  setModalPrice]  = useState(0);
+
+  // alert modal state
+  const [alertTicker, setAlertTicker] = useState<string | null>(null);
 
   const openModal = (ticker: string, price: number) => {
     setModalTicker(ticker);
@@ -264,7 +276,7 @@ export default function Watchlist() {
       ) : (
         <div className="bg-surface rounded-xl border border-border overflow-hidden max-w-lg">
           {items.map((item) => (
-            <WatchRow key={item.id} item={item} onAddToPortfolio={openModal} />
+            <WatchRow key={item.id} item={item} onAddToPortfolio={openModal} onCreateAlert={setAlertTicker} />
           ))}
         </div>
       )}
@@ -274,6 +286,13 @@ export default function Watchlist() {
           ticker={modalTicker}
           currentPrice={modalPrice}
           onClose={() => setModalTicker(null)}
+        />
+      )}
+
+      {alertTicker && (
+        <AlertModal
+          ticker={alertTicker}
+          onClose={() => setAlertTicker(null)}
         />
       )}
     </div>

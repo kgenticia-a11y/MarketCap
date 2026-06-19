@@ -98,17 +98,38 @@ async def get_analytics(
         .all()
     )
 
+    snapshot_list = [
+        {"date": s.date, "value": s.total_value, "cost": s.total_cost}
+        for s in snapshots
+    ]
+
+    # Fetch SPY benchmark data for the same date range as snapshots
+    benchmark = []
+    if len(snapshot_list) >= 2:
+        start_date = snapshot_list[0]["date"]
+        end_date = today
+        try:
+            benchmark = await market_data.get_benchmark_history(start_date, end_date)
+        except Exception:
+            logger.warning("Failed to fetch SPY benchmark data")
+
+    # Dividend income totals
+    total_annual_dividend_income = round(
+        sum(h.get("annual_dividend_income", 0) for h in holdings), 2
+    )
+    total_monthly_dividend_income = round(total_annual_dividend_income / 12, 2)
+
     return {
         "holdings": holdings,
-        "snapshots": [
-            {"date": s.date, "value": s.total_value, "cost": s.total_cost}
-            for s in snapshots
-        ],
+        "snapshots": snapshot_list,
+        "benchmark": benchmark,
         "total_cost":    round(total_cost,  2),
         "total_value":   round(total_value, 2),
         "total_pnl":     round(total_value - total_cost, 2),
         "total_pnl_pct": round((total_value - total_cost) / total_cost * 100, 2)
                          if total_cost > 0 else 0,
+        "total_annual_dividend_income":  total_annual_dividend_income,
+        "total_monthly_dividend_income": total_monthly_dividend_income,
     }
 
 

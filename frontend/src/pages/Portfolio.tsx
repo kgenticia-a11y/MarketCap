@@ -12,14 +12,15 @@ import { useTheme } from "../context/ThemeContext";
 import {
   Trash2, Briefcase, TrendingUp, TrendingDown, DollarSign,
   Plus, Pencil, Check, X, Download, Brain, AlertTriangle,
-  Globe, Activity, Shield, ChevronDown, ChevronUp, BarChart3,
+  Globe, Activity, Shield, ChevronDown, ChevronUp, BarChart3, Bell,
 } from "lucide-react";
 import { toast } from "sonner";
+import AlertModal from "../components/AlertModal";
 import { clsx } from "clsx";
 import {
   PieChart, Pie, Cell, Tooltip, BarChart, Bar,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine,
-  ResponsiveContainer,
+  ResponsiveContainer, LineChart, Line, Legend,
 } from "recharts";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
@@ -28,8 +29,10 @@ interface Holding {
   ticker: string; name: string; sector: string;
   shares: number; avg_buy_price: number; current_price: number;
   cost: number; value: number; pnl: number; pnl_pct: number; allocation_pct: number;
+  dividend_yield: number; annual_dividend_per_share: number; annual_dividend_income: number;
 }
 interface Snapshot { date: string; value: number; cost: number; }
+interface BenchmarkPoint { date: string; close: number; }
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 const PIE_COLORS = [
@@ -483,8 +486,9 @@ function DiversificationPanel({ holdings }: { holdings: Holding[] }) {
 }
 
 /* ── P&L history chart ─────────────────────────────────────────────────── */
-function PnlHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
+function PnlHistoryChart({ snapshots, benchmark }: { snapshots: Snapshot[]; benchmark: BenchmarkPoint[] }) {
   const { theme } = useTheme();
+  const [mode, setMode] = useState<"pct" | "dollar">("pct");
   const gridColor = theme === "light" ? "#e2e8f0" : "#2a2a45";
   const mutedColor = theme === "light" ? "#64748b" : "#5a5a7a";
   const tooltipStyle = {
@@ -502,38 +506,124 @@ function PnlHistoryChart({ snapshots }: { snapshots: Snapshot[] }) {
       </div>
     );
   }
+
   const chartData = snapshots.map(s => ({ date: s.date, pnl: +(s.value - s.cost).toFixed(2) }));
   const latestPnl = chartData[chartData.length - 1]?.pnl ?? 0;
   const positive = latestPnl >= 0;
   const lineColor = positive ? "#1ed688" : "#ff5c5c";
+
+  // Normalize data for % vs Benchmark mode
+  const benchmarkMap = new Map(benchmark.map(b => [b.date, b.close]));
+  const firstValue = snapshots[0]?.value ?? 1;
+  const firstSpy = benchmarkMap.get(snapshots[0]?.date) ?? null;
+
+  const pctData = snapshots.map(s => {
+    const portfolioPct = ((s.value / firstValue) - 1) * 100;
+    const spyClose = benchmarkMap.get(s.date);
+    const spyPct = (firstSpy && spyClose) ? ((spyClose / firstSpy) - 1) * 100 : null;
+    return { date: s.date, portfolio: +portfolioPct.toFixed(2), spy: spyPct != null ? +spyPct.toFixed(2) : null };
+  });
+
+  // Summary stats
+  const lastPctPoint = pctData[pctData.length - 1];
+  const portfolioReturn = lastPctPoint?.portfolio ?? 0;
+  const spyReturn = lastPctPoint?.spy ?? null;
+  const vsBenchmark = spyReturn != null ? portfolioReturn - spyReturn : null;
+
+  const hasBenchmark = benchmark.length > 0;
+
   return (
     <div className="bg-surface rounded-xl border border-border p-5">
       <div className="flex items-center justify-between mb-4">
         <p className="text-[10px] font-semibold text-muted uppercase tracking-widest">P&amp;L History</p>
-        <span className={clsx("text-sm font-bold", positive ? "text-positive" : "text-negative")}>
-          {positive ? "+" : "−"}${fmtMoney(Math.abs(latestPnl))}
-        </span>
+        <div className="flex items-center gap-2">
+          {hasBenchmark && (
+            <div className="flex items-center gap-1">
+              {(["pct", "dollar"] as const).map(v => (
+                <button key={v} onClick={() => setMode(v)}
+                  className={clsx("rounded-lg border py-1.5 px-2.5 text-[10px] font-medium transition-colors",
+                    mode === v ? "bg-accent/20 border-accent text-white" : "border-border text-muted hover:text-white hover:border-border/80")}>
+                  {v === "dollar" ? "Show $ P&L" : "Show % vs Benchmark"}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === "dollar" && (
+            <span className={clsx("text-sm font-bold", positive ? "text-positive" : "text-negative")}>
+              {positive ? "+" : "−"}${fmtMoney(Math.abs(latestPnl))}
+            </span>
+          )}
+        </div>
       </div>
-      <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={lineColor} stopOpacity={0.25} />
-              <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-          <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false}
-            tickFormatter={v => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString()}`} width={68} />
-          <ReferenceLine y={0} stroke={gridColor} strokeDasharray="4 4" />
-          <Tooltip contentStyle={tooltipStyle}
-            formatter={(v: any) => [`${v >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(v))}`, "P&L"]}
-            labelFormatter={(d: any) => fmtDate(d)} />
-          <Area type="monotone" dataKey="pnl" stroke={lineColor} strokeWidth={2}
-            fill="url(#pnlGrad)" dot={chartData.length <= 14} activeDot={{ r: 4 }} />
-        </AreaChart>
-      </ResponsiveContainer>
+
+      {mode === "dollar" ? (
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={lineColor} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false}
+              tickFormatter={v => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString()}`} width={68} />
+            <ReferenceLine y={0} stroke={gridColor} strokeDasharray="4 4" />
+            <Tooltip contentStyle={tooltipStyle}
+              formatter={(v: any) => [`${v >= 0 ? "+" : "−"}$${fmtMoney(Math.abs(v))}`, "P&L"]}
+              labelFormatter={(d: any) => fmtDate(d)} />
+            <Area type="monotone" dataKey="pnl" stroke={lineColor} strokeWidth={2}
+              fill="url(#pnlGrad)" dot={chartData.length <= 14} activeDot={{ r: 4 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={pctData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false}
+              tickFormatter={v => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`} width={52} />
+            <ReferenceLine y={0} stroke={gridColor} strokeDasharray="4 4" />
+            <Tooltip contentStyle={tooltipStyle}
+              formatter={(v: any, name: string) => [`${v >= 0 ? "+" : ""}${Number(v).toFixed(2)}%`, name === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"]}
+              labelFormatter={(d: any) => fmtDate(d)} />
+            <Legend formatter={(value: string) => value === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"} />
+            <Line type="monotone" dataKey="portfolio" stroke={lineColor} strokeWidth={2}
+              dot={pctData.length <= 14} activeDot={{ r: 4 }} />
+            {hasBenchmark && (
+              <Line type="monotone" dataKey="spy" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3"
+                dot={false} activeDot={{ r: 4 }} connectNulls />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+
+      {/* Benchmark summary card */}
+      {mode === "pct" && hasBenchmark && spyReturn != null && vsBenchmark != null && (
+        <div className="bg-surface-hover rounded-xl p-4 mt-4">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-[10px] text-muted uppercase tracking-widest font-semibold mb-1">Your Return</p>
+              <p className={clsx("text-sm font-bold", portfolioReturn >= 0 ? "text-positive" : "text-negative")}>
+                {portfolioReturn >= 0 ? "+" : ""}{portfolioReturn.toFixed(2)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted uppercase tracking-widest font-semibold mb-1">S&amp;P 500 Return</p>
+              <p className={clsx("text-sm font-bold", spyReturn >= 0 ? "text-positive" : "text-negative")}>
+                {spyReturn >= 0 ? "+" : ""}{spyReturn.toFixed(2)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted uppercase tracking-widest font-semibold mb-1">vs Benchmark</p>
+              <p className={clsx("text-sm font-bold", vsBenchmark >= 0 ? "text-positive" : "text-negative")}>
+                {vsBenchmark >= 0 ? "+" : ""}{vsBenchmark.toFixed(2)}% {vsBenchmark >= 0 ? "outperformance" : "underperformance"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -562,6 +652,77 @@ function HoldingList({ items, label }: { items: Holding[]; label: string }) {
           </Link>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ── Dividend Income Card ─────────────────────────────────────────────── */
+function DividendCard({ holdings }: { holdings: Holding[] }) {
+  const { theme } = useTheme();
+  const mutedColor = theme === "light" ? "#64748b" : "#5a5a7a";
+  const gridColor = theme === "light" ? "#e2e8f0" : "#2a2a45";
+  const tooltipStyle = {
+    background: theme === "light" ? "#fff" : "#1a1a2e",
+    border: `1px solid ${gridColor}`, borderRadius: 8,
+    color: theme === "light" ? "#0f172a" : "#e2e8f0", fontSize: 12,
+  };
+
+  const totalAnnual = holdings.reduce((s, h) => s + (h.annual_dividend_income ?? 0), 0);
+  const totalMonthly = totalAnnual / 12;
+  const hasDividends = totalAnnual > 0;
+
+  // Monthly distribution data — evenly spread (most US stocks pay quarterly)
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthlyData = months.map(m => ({ month: m, income: +(totalMonthly).toFixed(2) }));
+
+  if (!hasDividends) {
+    return (
+      <div className="bg-surface rounded-xl border border-border p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <DollarSign size={14} className="text-muted" />
+          <p className="text-[10px] font-semibold text-muted uppercase tracking-widest">Projected Dividend Income</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+          <DollarSign size={28} className="text-muted mb-2" />
+          <p className="text-sm text-muted mb-1">None of your current holdings pay dividends.</p>
+          <Link to="/screener" className="text-xs text-accent-light hover:text-accent transition-colors">
+            Explore dividend stocks in the Screener
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-surface rounded-xl border border-border p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <DollarSign size={14} className="text-muted" />
+        <p className="text-[10px] font-semibold text-muted uppercase tracking-widest">Projected Dividend Income</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <p className="text-[10px] text-muted uppercase tracking-widest mb-1">Annual Income</p>
+          <p className="text-2xl font-bold text-white">${fmtMoney(totalAnnual)}<span className="text-sm text-muted font-normal">/yr</span></p>
+        </div>
+        <div>
+          <p className="text-[10px] text-muted uppercase tracking-widest mb-1">Monthly Average</p>
+          <p className="text-2xl font-bold text-white">${fmtMoney(totalMonthly)}<span className="text-sm text-muted font-normal">/mo</span></p>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={120}>
+        <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+          <XAxis dataKey="month" tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fill: mutedColor, fontSize: 10 }} axisLine={false} tickLine={false}
+            tickFormatter={v => `$${v}`} width={42} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`$${fmtMoney(v)}`, "Income"]} />
+          <Bar dataKey="income" radius={[3, 3, 0, 0]} fill={PIE_COLORS[0]} />
+        </BarChart>
+      </ResponsiveContainer>
+
+      <p className="text-[10px] text-muted mt-3">Based on current holdings and trailing dividend rates</p>
     </div>
   );
 }
@@ -768,7 +929,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
 
   if (!analytics?.holdings?.length) return null;
 
-  const { holdings, snapshots } = analytics as { holdings: Holding[]; snapshots: Snapshot[] };
+  const { holdings, snapshots, benchmark: benchmarkData } = analytics as { holdings: Holding[]; snapshots: Snapshot[]; benchmark?: BenchmarkPoint[] };
   const totalVal = holdings.reduce((s: number, h: Holding) => s + h.value, 0);
   const totalCost = holdings.reduce((s: number, h: Holding) => s + h.cost, 0);
   const totalPnlPct = totalCost > 0 ? (totalVal - totalCost) / totalCost * 100 : 0;
@@ -793,12 +954,14 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
         <DiversificationPanel holdings={holdings} />
       </div>
 
+      <DividendCard holdings={holdings} />
+
       <div className="grid grid-cols-2 gap-4">
         <GeoExposure holdings={holdings} />
         <TopHoldingsBar holdings={holdings} />
       </div>
 
-      <PnlHistoryChart snapshots={snapshots} />
+      <PnlHistoryChart snapshots={snapshots} benchmark={benchmarkData ?? []} />
 
       {holdings.length >= 2 && <PerformersPanel holdings={holdings} />}
 
@@ -813,7 +976,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
 }
 
 /* ── Holdings table row ────────────────────────────────────────────────── */
-function PortfolioRow({ item }: { item: PortfolioItem }) {
+function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { item: PortfolioItem; onCreateAlert: (ticker: string) => void; dividendInfo?: { dividend_yield: number; annual_dividend_income: number }; spyChangePct: number | null }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [editShares, setEditShares] = useState(String(item.shares));
@@ -876,6 +1039,8 @@ function PortfolioRow({ item }: { item: PortfolioItem }) {
         </td>
         <td className="py-2 px-4" />
         <td className="py-2 px-4" />
+        <td className="py-2 px-4" />
+        <td className="py-2 px-4" />
         <td className="py-2 px-5 text-right">
           <div className="flex items-center justify-end gap-2">
             <button onClick={() => {
@@ -909,7 +1074,20 @@ function PortfolioRow({ item }: { item: PortfolioItem }) {
       <td className="py-3 px-4 text-right text-sm text-white">
         {priceLoaded ? `$${fmtMoney(value)}` : <span className="text-muted">—</span>}
       </td>
-      <td className={clsx("py-3 px-4 text-right text-sm font-medium", positive ? "text-positive" : "text-negative")}>
+      <td className="py-3 px-4 text-right text-sm text-muted">
+        {dividendInfo && dividendInfo.dividend_yield > 0 ? `${dividendInfo.dividend_yield.toFixed(2)}%` : <span className="text-muted">—</span>}
+      </td>
+      <td className="py-3 px-4 text-right text-sm text-muted">
+        {dividendInfo && dividendInfo.annual_dividend_income > 0 ? `$${fmtMoney(dividendInfo.annual_dividend_income)}` : <span className="text-muted">—</span>}
+      </td>
+            <td className="py-3 px-4 text-right text-sm">
+        {priceLoaded && spyChangePct != null ? (
+          <span className={clsx("font-medium", pnlPct - spyChangePct >= 0 ? "text-positive" : "text-negative")}>
+            {pnlPct - spyChangePct >= 0 ? "+" : ""}{(pnlPct - spyChangePct).toFixed(2)}%
+          </span>
+        ) : <span className="text-muted">—</span>}
+      </td>
+<td className={clsx("py-3 px-4 text-right text-sm font-medium", positive ? "text-positive" : "text-negative")}>
         {priceLoaded
           ? <>{positive ? "+" : "−"}${fmtMoney(Math.abs(pnl))}{" "}<span className="text-xs opacity-70">({positive ? "+" : ""}{pnlPct.toFixed(2)}%)</span></>
           : <span className="text-muted">—</span>}
@@ -917,6 +1095,7 @@ function PortfolioRow({ item }: { item: PortfolioItem }) {
       <td className="py-3 px-5 text-right">
         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button onClick={() => setEditing(true)} className="text-muted hover:text-white transition-colors"><Pencil size={13} /></button>
+          <button onClick={() => onCreateAlert(item.ticker)} title="Create alert" className="text-muted hover:text-amber-400 transition-colors"><Bell size={13} /></button>
           <button onClick={() => del.mutate()} disabled={del.isPending} className="text-muted hover:text-negative transition-colors"><Trash2 size={13} /></button>
         </div>
       </td>
@@ -985,12 +1164,37 @@ export default function Portfolio() {
   const qc = useQueryClient();
   const [riskProfile, setRiskProfile] = useState<RiskProfile | null>(getRiskProfile);
   const [showRiskModal, setShowRiskModal] = useState(false);
+  const [alertTicker, setAlertTicker] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["portfolio"],
     queryFn: getPortfolio,
     enabled: !!user,
   });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["portfolio-analytics"],
+    queryFn: getPortfolioAnalytics,
+    staleTime: 2 * 60_000,
+    enabled: !!user,
+  });
+
+  const { data: spyQuote } = useQuery({
+    queryKey: ["quote", "SPY"],
+    queryFn: () => getQuote("SPY"),
+    staleTime: 60_000,
+  });
+  const spyChangePct = (spyQuote?.change_pct as number) ?? null;
+
+  const divMap = new Map<string, { dividend_yield: number; annual_dividend_income: number }>();
+  if (analytics?.holdings) {
+    for (const h of analytics.holdings as Holding[]) {
+      divMap.set(h.ticker, {
+        dividend_yield: h.dividend_yield ?? 0,
+        annual_dividend_income: h.annual_dividend_income ?? 0,
+      });
+    }
+  }
 
   const saveRiskProfile = (rp: RiskProfile) => {
     setRiskProfileLS(rp);
@@ -1028,6 +1232,10 @@ export default function Portfolio() {
     <div className="p-6">
       {showRiskModal && (
         <RiskProfileModal onSave={saveRiskProfile} onClose={() => setShowRiskModal(false)} />
+      )}
+
+      {alertTicker && (
+        <AlertModal ticker={alertTicker} onClose={() => setAlertTicker(null)} />
       )}
 
       {/* Header */}
@@ -1075,7 +1283,7 @@ export default function Portfolio() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
-                  {["Ticker","Shares","Current","Avg Cost","Value","P&L",""].map(h => (
+                  {["Ticker","Shares","Current","Avg Cost","Value","Div Yield","Annual Div","vs SPY","P&L",""].map(h => (
                     <th key={h} className={clsx("py-3 text-muted font-medium",
                       h === "" ? "px-5" : "px-4",
                       h === "Ticker" ? "text-left px-5" : "text-right")}>
@@ -1085,7 +1293,7 @@ export default function Portfolio() {
                 </tr>
               </thead>
               <tbody>
-                {items.map(item => <PortfolioRow key={item.id} item={item} />)}
+                {items.map(item => <PortfolioRow key={item.id} item={item} onCreateAlert={setAlertTicker} dividendInfo={divMap.get(item.ticker)} spyChangePct={spyChangePct} />)}
               </tbody>
             </table>
           </div>

@@ -21,3 +21,6 @@ export const getIncomeData = (ticker: string) =>
 export const getMarketUpdate = () =>
   client.get("/stocks/market/update").then((r) => r.data);
 
+export const getEarningsCalendar = (weekOffset: number = 0) =>
+  client.get("/stocks/earnings/calendar", { params: { week_offset: weekOffset } }).then((r) => r.data);
+

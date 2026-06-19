@@ -95,6 +95,16 @@ async def income_data(ticker: str):
         raise HTTPException(502, "Market data unavailable.")
 
 
+@router.get("/earnings/calendar")
+async def earnings_calendar(week_offset: int = Query(0, ge=-4, le=8)):
+    """Return earnings events for the given week (0=current, 1=next, etc.)."""
+    try:
+        return await market_data.get_earnings_calendar(week_offset)
+    except Exception:
+        logger.exception("earnings_calendar failed")
+        raise HTTPException(502, "Earnings data unavailable.")
+
+
 @router.get("/market/update")
 async def market_update():
     try:
