@@ -5,7 +5,6 @@ import type { Alert } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router-dom";
 import { Bell, Trash2, Plus, TrendingUp, TrendingDown } from "lucide-react";
-import { clsx } from "clsx";
 import { toast } from "sonner";
 import AlertModal from "../components/AlertModal";
 

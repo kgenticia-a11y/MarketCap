@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createAlert } from "../api/alerts";
-import { X, TrendingUp, TrendingDown, Percent, BarChart3, Activity } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Percent, Activity } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
 

@@ -586,7 +586,8 @@ function PnlHistoryChart({ snapshots, benchmark }: { snapshots: Snapshot[]; benc
               tickFormatter={v => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`} width={52} />
             <ReferenceLine y={0} stroke={gridColor} strokeDasharray="4 4" />
             <Tooltip contentStyle={tooltipStyle}
-              formatter={(v: any, name: string) => [`${v >= 0 ? "+" : ""}${Number(v).toFixed(2)}%`, name === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"]}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(_v: any, _n: any, p: any) => [`${p.value >= 0 ? "+" : ""}${Number(p.value).toFixed(2)}%`, p.dataKey === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"]}
               labelFormatter={(d: any) => fmtDate(d)} />
             <Legend formatter={(value: string) => value === "portfolio" ? "Portfolio" : "S&P 500 (SPY)"} />
             <Line type="monotone" dataKey="portfolio" stroke={lineColor} strokeWidth={2}
