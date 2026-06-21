@@ -266,6 +266,54 @@ _UNIVERSE = [
     "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
     # Fintech / Growth
     "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    # ── 300 more tickers ─────────────────────────────────────────────────
+    # Technology / Semiconductors / Software
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
+    # Growth / Crypto / Quantum
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
 
 
@@ -490,6 +538,54 @@ _EXTENDED_UNIVERSE = [
     "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
     # Fintech / Growth
     "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    # ── 300 more tickers ─────────────────────────────────────────────────
+    # Technology / Semiconductors / Software
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
+    # Growth / Crypto / Quantum
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
 
 
@@ -731,8 +827,55 @@ _SCREENER_UNIVERSE = [
     "SO", "D", "AEP",
     "XEL", "WEC", "AWK",
     "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
-    # Fintech / Growth (10)
+    # Fintech / Growth (25)
     "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
+    # ── 300 more tickers by sector ───────────────────────────────────────
+    # Technology / Semiconductors / Software (50)
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials (35)
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare (35)
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary (30)
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services (15)
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy (20)
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials (30)
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples (15)
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials (15)
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate (15)
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities (10)
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs (15)
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
 ]
 
 _screener_data: list = []

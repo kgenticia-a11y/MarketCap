@@ -400,10 +400,10 @@ export default function Screener() {
               : `${results.length} Stocks`}
           </span>
           <span className="text-[10px] text-muted">
-            {loadedCount > 0 && loadedCount < 399
-              ? `${loadedCount} / 399 loaded`
-              : loadedCount >= 399
-                ? "399 in universe"
+            {loadedCount > 0 && loadedCount < 699
+              ? `${loadedCount} / 699 loaded`
+              : loadedCount >= 699
+                ? "699 in universe"
                 : null}
           </span>
         </div>
