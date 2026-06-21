@@ -206,13 +206,13 @@ async def analyze_portfolio(
     body: AnalyzeRequest,
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if not settings.anthropic_api_key:
+    if not settings.gemini_api_key:
         raise HTTPException(503, "AI analysis is not configured on this server.")
 
     try:
-        import anthropic
+        from google import genai
     except ImportError:
-        raise HTTPException(503, "Anthropic SDK not installed.")
+        raise HTTPException(503, "Google GenAI SDK not installed.")
 
     risk_ctx = ""
     if body.risk_profile:
@@ -254,25 +254,21 @@ Respond in the following JSON structure (no markdown, pure JSON):
   "beginner_explanation": "Plain-language paragraph suitable for a first-time investor explaining the portfolio's current state and what they should know"
 }}"""
 
-    aclient = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = genai.Client(api_key=settings.gemini_api_key)
     try:
-        message = await aclient.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash",
+            contents=prompt,
         )
     except Exception as exc:
-        logger.error("Anthropic API call failed: %s", exc)
+        logger.error("Gemini API call failed: %s", exc)
         raise HTTPException(502, "AI analysis request failed.")
 
-    if not message.content:
+    if not response.text:
         raise HTTPException(502, "AI returned an empty response.")
 
-    text_block = next((b for b in message.content if b.type == "text"), None)
-    if not text_block:
-        raise HTTPException(502, "AI returned no text content.")
-
-    text = text_block.text.strip()
+    text = response.text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:

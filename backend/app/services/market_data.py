@@ -232,6 +232,40 @@ _UNIVERSE = [
     "EQIX", "CCI",
     "XEL", "WEC", "AWK",
     "ADI", "LRCX", "KLAC",
+    # ── 200 additional tickers ───────────────────────────────────────────
+    # Technology
+    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy
+    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    # Real Estate
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
 ]
 
 
@@ -422,6 +456,40 @@ _EXTENDED_UNIVERSE = [
     "EQIX", "CCI",
     "XEL", "WEC", "AWK",
     "ADI", "LRCX", "KLAC",
+    # ── 200 additional tickers ───────────────────────────────────────────
+    # Technology
+    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy
+    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    # Real Estate
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
 ]
 
 
@@ -599,50 +667,72 @@ def get_fund_categories() -> list[str]:
 # ── Stock Screener ─────────────────────────────────────────────────────────
 
 _SCREENER_UNIVERSE = [
-    # Technology (40)
+    # Technology (80)
     "AAPL", "MSFT", "NVDA", "AMD", "INTC", "CSCO", "ORCL", "CRM", "ADBE", "QCOM",
     "TXN", "AMAT", "AVGO", "MU", "IBM", "INTU", "NOW", "SNOW", "PLTR", "CRWD",
     "PANW", "NET", "ZS", "FTNT", "DDOG", "TEAM", "MDB", "HPQ", "DELL",
     "SHOP", "XYZ", "ZM", "UBER", "LYFT", "TWLO", "OKTA", "DOCU", "ADI", "LRCX", "KLAC",
-    # Financials (28)
+    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials (53)
     "JPM", "GS", "BAC", "WFC", "MS", "V", "MA", "PYPL", "AXP", "BLK",
     "C", "USB", "PNC", "COF", "SCHW", "ICE", "CME", "TFC",
     "SPGI", "MCO", "MSCI", "NDAQ", "TROW", "FISV", "FIS", "ADP", "COIN", "BRK-B",
-    # Healthcare (24)
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare (49)
     "JNJ", "PFE", "MRK", "ABBV", "UNH", "LLY", "AMGN", "GILD", "CVS",
     "BMY", "BIIB", "REGN", "ISRG", "BSX", "MDT", "ZBH", "DHR",
     "MRNA", "VRTX", "HUM", "CI", "ELV", "ABT", "ZTS",
-    # Consumer Discretionary (25)
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary (45)
     "AMZN", "TSLA", "HD", "LOW", "NKE", "MCD", "SBUX", "CMG", "TGT", "COST",
     "F", "GM", "BKNG", "ABNB", "MAR", "HLT", "EBAY", "LVS",
     "LULU", "TJX", "DG", "DLTR", "AZO", "ORLY", "KR",
-    # Communication Services (16)
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services (26)
     "META", "GOOGL", "NFLX", "DIS", "T", "VZ",
     "SNAP", "PINS", "RBLX", "EA", "WBD",
     "ROKU", "SPOT", "TMUS", "CMCSA", "CHTR",
-    # Energy (12)
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy (22)
     "XOM", "CVX", "COP", "SLB", "EOG",
     "OXY", "PSX", "VLO", "MPC", "HAL",
     "DVN", "BKR",
-    # Industrials (18)
+    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials (38)
     "BA", "GE", "CAT", "HON", "UPS", "DE",
     "LMT", "RTX", "NOC", "GD", "MMM", "EMR", "ETN",
     "FDX", "UNP", "CSX", "NSC", "WM",
-    # Consumer Staples (10)
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples (20)
     "WMT", "PG", "KO", "PEP", "CL",
     "MDLZ", "STZ", "MO", "PM", "EL",
-    # Materials (11)
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials (21)
     "FCX", "NEM", "LIN",
     "DOW", "DD", "NUE",
     "ALB", "SHW", "PPG", "ECL", "IFF",
-    # Real Estate (7)
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    # Real Estate (17)
     "AMT", "PLD",
     "SPG", "O", "EQR",
     "EQIX", "CCI",
-    # Utilities (8)
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities (18)
     "NEE", "DUK",
     "SO", "D", "AEP",
     "XEL", "WEC", "AWK",
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth (10)
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
 ]
 
 _screener_data: list = []

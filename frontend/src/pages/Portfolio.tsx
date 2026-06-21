@@ -792,7 +792,7 @@ function AIAnalysisPanel({
           </div>
           <div>
             <p className="text-sm font-bold text-white">AI Portfolio Analysis</p>
-            <p className="text-[10px] text-muted">Powered by Claude</p>
+            <p className="text-[10px] text-muted">Powered by Gemini</p>
           </div>
         </div>
         <button onClick={run} disabled={loading || holdings.length === 0}
