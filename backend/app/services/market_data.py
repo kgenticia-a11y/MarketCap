@@ -316,6 +316,9 @@ _UNIVERSE = [
     "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
 
+# Cap to stay within Yahoo Finance's tolerance on cold fetches.
+_UNIVERSE = _UNIVERSE[:300]
+
 
 def _fetch_gainers_losers() -> dict:
     # Download 2 days so we can compute prev-close → last-close change
@@ -587,6 +590,9 @@ _EXTENDED_UNIVERSE = [
     "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
     "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
+
+# Cap to stay within Yahoo Finance's tolerance on cold fetches.
+_EXTENDED_UNIVERSE = _EXTENDED_UNIVERSE[:325]
 
 
 def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40):
@@ -878,11 +884,15 @@ _SCREENER_UNIVERSE = [
     "SE", "INFY", "WIT", "HDB", "IBN",
 ]
 
+# Yahoo Finance rate-limits aggressively above ~350 tickers per cold load.
+# Slice keeps the full source list available for incremental rollouts later.
+_SCREENER_UNIVERSE = _SCREENER_UNIVERSE[:350]
+
 _screener_data: list = []
 _screener_ts: float = 0.0
 _screener_fetching: bool = False   # sentinel: True while a fetch is in progress
 _screener_lock = threading.Lock()
-_SCREENER_TTL = 600  # 10 minutes
+_SCREENER_TTL = 1800  # 30 minutes
 
 
 def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
@@ -912,12 +922,7 @@ def _fetch_screener() -> list[dict]:
 
     tickers = _SCREENER_UNIVERSE
 
-    # Fetch only 5 days of price data — we need just two rows (last & prev close).
-    # 52W return comes from info["52WeekChange"] instead, avoiding a 1-year download.
-    raw = yf.download(
-        tickers, period="5d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    )
+    raw = _download_chunked(tickers, "5d")
     close = raw["Close"]
 
     price_map: dict[str, dict] = {}
@@ -942,7 +947,6 @@ def _fetch_screener() -> list[dict]:
             pe   = info.get("trailingPE")
             mkt_cap = info.get("marketCap") or 0
             price   = pd_.get("price", 0)
-            # 52WeekChange is a decimal fraction in yfinance (0.25 = +25 %)
             raw_52 = info.get("52WeekChange")
             w52r   = round(raw_52 * 100, 2) if raw_52 is not None else None
             div_rate  = info.get("dividendRate") or 0
@@ -965,12 +969,17 @@ def _fetch_screener() -> list[dict]:
             return None
 
     results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=24) as pool:
-        futs = {pool.submit(fetch_info, t): t for t in tickers}
-        for fut in as_completed(futs):
-            r = fut.result()
-            if r:
-                results.append(r)
+    batch_size = 40
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futs = {pool.submit(fetch_info, t): t for t in batch}
+            for fut in as_completed(futs):
+                r = fut.result()
+                if r:
+                    results.append(r)
+        if i + batch_size < len(tickers):
+            time.sleep(1.0)
 
     results.sort(key=lambda x: x["market_cap"], reverse=True)
     with _screener_lock:
@@ -1163,11 +1172,7 @@ async def stream_screener():
     tickers = _SCREENER_UNIVERSE
     loop = asyncio.get_running_loop()
 
-    # Bulk price download is fast (5 days, not 1 year)
-    raw = await loop.run_in_executor(_pool, lambda: yf.download(
-        tickers, period="5d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    ))
+    raw = await loop.run_in_executor(_pool, lambda: _download_chunked(tickers, "5d"))
     close = raw["Close"]
     price_map: dict[str, dict] = {}
     if len(close) >= 2:
@@ -1179,9 +1184,9 @@ async def stream_screener():
             except Exception:
                 pass
 
-    # Fire all .info calls in parallel; each result is pushed to an asyncio Queue
-    # so we can yield it to the HTTP response the instant it arrives.
     queue: asyncio.Queue[dict | None] = asyncio.Queue()
+    batch_size = 40
+    total_expected = len(tickers)
 
     def _fetch_one(ticker: str) -> None:
         try:
@@ -1211,16 +1216,28 @@ async def stream_screener():
         except Exception:
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
-    for t in tickers:
-        _pool.submit(_fetch_one, t)
+    def _process_batches():
+        # Limit in-flight .info calls per batch — _pool has 16 workers but
+        # we throttle to 6 to avoid Yahoo's "Invalid Crumb" rate limit.
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        for i in range(0, len(tickers), batch_size):
+            batch = tickers[i:i + batch_size]
+            with _TPE(max_workers=6) as p:
+                list(p.map(_fetch_one, batch))
+            if i + batch_size < len(tickers):
+                time.sleep(1.0)
+
+    loop.run_in_executor(None, _process_batches)
 
     collected: list[dict] = []
     try:
-        for _ in tickers:
-            item = await queue.get()
+        for _ in range(total_expected):
+            item = await asyncio.wait_for(queue.get(), timeout=120)
             if item is not None:
                 collected.append(item)
                 yield item
+    except asyncio.TimeoutError:
+        pass
     finally:
         # Always release the sentinel — even if the generator is closed early
         # (client disconnects, exception mid-stream) so future requests don't

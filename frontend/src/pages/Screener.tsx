@@ -185,7 +185,7 @@ export default function Screener() {
     };
 
     const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 90_000); // 90 s hard limit
+    const timeoutId  = setTimeout(() => controller.abort(), 150_000);
 
     (async () => {
       try {
@@ -400,10 +400,10 @@ export default function Screener() {
               : `${results.length} Stocks`}
           </span>
           <span className="text-[10px] text-muted">
-            {loadedCount > 0 && loadedCount < 699
-              ? `${loadedCount} / 699 loaded`
-              : loadedCount >= 699
-                ? "699 in universe"
+            {loadedCount > 0 && loadedCount < 350
+              ? `${loadedCount} / 350 loaded`
+              : loadedCount >= 350
+                ? "350 in universe"
                 : null}
           </span>
         </div>
