@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     allowed_origins: str = (
         "http://localhost:5173,http://localhost:5174,http://localhost:5175,"
         "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,"
-        "https://marketcap.ksystems.live"
+        "https://marketcap.ksystems.live,"
+        "https://market-cap-tau.vercel.app,"
+        "https://market-cap-tau.com"
     )
 
     # Regex matching allowed origins, in addition to the explicit list above.
@@ -40,7 +42,7 @@ class Settings(BaseSettings):
     # rather than pinning exact URLs that break on the next push. Empty string
     # disables regex matching.
     allowed_origin_regex: str = (
-        r"https://market-[a-z0-9-]+-kgenticia-3648s-projects\.vercel\.app"
+        r"https://market-[a-z0-9-]+\.vercel\.app"
     )
 
     # Seconds between autonomous market-overview cache refreshes. Kept below the
