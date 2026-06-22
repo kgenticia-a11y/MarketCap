@@ -3,7 +3,7 @@ import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/rea
 import { Link } from "react-router-dom";
 import {
   getPortfolio, removeFromPortfolio, getPortfolioAnalytics,
-  addToPortfolio, updatePortfolioItem, analyzePortfolio,
+  addToPortfolio, updatePortfolioItem, analyzePortfolio, getPortfolioHealthScore,
 } from "../api/portfolio";
 import type { RiskProfile } from "../api/portfolio";
 import { getQuote } from "../api/stocks";
@@ -30,6 +30,7 @@ interface Holding {
   shares: number; avg_buy_price: number; current_price: number;
   cost: number; value: number; pnl: number; pnl_pct: number; allocation_pct: number;
   dividend_yield: number; annual_dividend_per_share: number; annual_dividend_income: number;
+  beta: number | null;
 }
 interface Snapshot { date: string; value: number; cost: number; }
 interface BenchmarkPoint { date: string; close: number; }
@@ -90,7 +91,10 @@ function portfolioBeta(holdings: Holding[], totalValue: number): number {
   if (!totalValue) return 1;
   return holdings.reduce((acc, h) => {
     const weight = h.value / totalValue;
-    const beta = SECTOR_BETA[h.sector] ?? 1.0;
+    // Prefer the real per-holding beta yfinance reports; some ETFs/ADRs omit
+    // it, so fall back to a sector-average estimate (kept in sync with the
+    // backend's health-score calc in app/services/health_score.py).
+    const beta = typeof h.beta === "number" ? h.beta : (SECTOR_BETA[h.sector] ?? 1.0);
     return acc + weight * beta;
   }, 0);
 }
@@ -449,38 +453,93 @@ function RiskMetrics({ holdings, totalValue }: { holdings: Holding[]; totalValue
   );
 }
 
-/* ── Diversification panel ─────────────────────────────────────────────── */
-function DiversificationPanel({ holdings }: { holdings: Holding[] }) {
-  const { score, sectors, topPct } = diversificationScore(holdings);
-  const { label, cls } =
-    score >= 80 ? { label: "Excellent", cls: "text-positive" }
-    : score >= 60 ? { label: "Good", cls: "text-amber-400" }
-    : score >= 40 ? { label: "Fair", cls: "text-orange-400" }
-    : { label: "Concentrated", cls: "text-negative" };
+/* ── Portfolio Health Score card ───────────────────────────────────────── */
+interface HealthSubScore { score: number; max: number; level: "healthy" | "caution" | "risk"; label?: string; value?: number; }
+interface HealthScoreData {
+  score: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  sub_scores: {
+    diversification: HealthSubScore;
+    volatility: HealthSubScore;
+    concentration: HealthSubScore;
+    beta: HealthSubScore;
+  };
+  explanation: string;
+  history: { date: string; score: number }[];
+}
+
+const LEVEL_COLOR: Record<string, string> = { healthy: "#10b981", caution: "#f59e0b", risk: "#ef4444" };
+const GRADE_COLOR: Record<string, string> = { A: "#10b981", B: "#10b981", C: "#f59e0b", D: "#f97316", F: "#ef4444" };
+
+function HealthScoreCard() {
+  const { data, isLoading } = useQuery<HealthScoreData>({
+    queryKey: ["portfolio-health-score"],
+    queryFn: getPortfolioHealthScore,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+  });
+
+  if (isLoading || !data) {
+    return <div className="bg-surface rounded-xl border border-border p-4 h-full min-h-[260px] animate-pulse" />;
+  }
+
+  const gradeColor = GRADE_COLOR[data.grade] ?? "#94a3b8";
+  const gauges: { label: string; sub: HealthSubScore }[] = [
+    { label: "Diversification", sub: data.sub_scores.diversification },
+    { label: "Volatility",      sub: data.sub_scores.volatility },
+    { label: "Concentration",   sub: data.sub_scores.concentration },
+    { label: "Beta",            sub: data.sub_scores.beta },
+  ];
+
   return (
     <div className="bg-surface rounded-xl border border-border p-4 flex flex-col">
-      <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2">Diversification</p>
-      <div className="flex-1 flex flex-col items-center justify-center py-2 gap-1">
-        <div className={clsx("text-5xl font-bold tabular-nums", cls)}>{score}</div>
-        <div className={clsx("text-xs font-semibold", cls)}>{label}</div>
-        <div className="w-full h-1.5 bg-border rounded-full mt-2 overflow-hidden">
-          <div className="h-full rounded-full bg-accent transition-all duration-700" style={{ width: `${score}%` }} />
+      <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2">Portfolio Health Score</p>
+
+      <div className="flex items-center gap-3">
+        <div className="flex flex-col items-center shrink-0">
+          <div className="text-5xl font-bold tabular-nums leading-none" style={{ color: gradeColor }}>{data.grade}</div>
+          <div className="text-[11px] font-semibold text-muted mt-1">{data.score}/100</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          {data.history.length > 1 ? (
+            <ResponsiveContainer width="100%" height={40}>
+              <AreaChart data={data.history}>
+                <defs>
+                  <linearGradient id="healthScoreGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={gradeColor} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={gradeColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="score" stroke={gradeColor} fill="url(#healthScoreGrad)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-10 flex items-center text-[10px] text-muted">History builds daily.</div>
+          )}
+          <div className="text-[10px] text-muted text-right">Last 30 days</div>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-1 pt-3 mt-2 border-t border-border/50 text-center">
-        <div>
-          <div className="text-sm font-bold text-white">{sectors}</div>
-          <div className="text-[10px] text-muted">Sectors</div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-white">{holdings.length}</div>
-          <div className="text-[10px] text-muted">Holdings</div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-white">{topPct.toFixed(0)}%</div>
-          <div className="text-[10px] text-muted">Top pos.</div>
-        </div>
+
+      <div className="space-y-1.5 mt-3">
+        {gauges.map(({ label, sub }) => {
+          const color = LEVEL_COLOR[sub.level] ?? "#94a3b8";
+          const pct = Math.min(100, sub.score / sub.max * 100);
+          const extra = sub.label ?? (sub.value !== undefined ? `β ${sub.value.toFixed(2)}` : undefined);
+          return (
+            <div key={label}>
+              <div className="flex items-center justify-between text-[10px] text-muted mb-0.5">
+                <span>{label}{extra ? ` · ${extra}` : ""}</span>
+                <span className="font-semibold" style={{ color }}>{sub.score}/{sub.max}</span>
+              </div>
+              <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <p className="text-[11px] text-muted mt-3 pt-3 border-t border-border/50 leading-snug">{data.explanation}</p>
     </div>
   );
 }
@@ -792,7 +851,7 @@ function AIAnalysisPanel({
           </div>
           <div>
             <p className="text-sm font-bold text-white">AI Portfolio Analysis</p>
-            <p className="text-[10px] text-muted">Powered by Claude</p>
+            <p className="text-[10px] text-muted">Powered by Gemini</p>
           </div>
         </div>
         <button onClick={run} disabled={loading || holdings.length === 0}
@@ -952,7 +1011,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
       <div className="grid grid-cols-3 gap-4">
         <AllocationPie data={holdingPie} title="Allocation — By Holding" />
         <AllocationPie data={sectorPie} title="Allocation — By Sector" />
-        <DiversificationPanel holdings={holdings} />
+        <HealthScoreCard />
       </div>
 
       <DividendCard holdings={holdings} />

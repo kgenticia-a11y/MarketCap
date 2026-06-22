@@ -232,7 +232,92 @@ _UNIVERSE = [
     "EQIX", "CCI",
     "XEL", "WEC", "AWK",
     "ADI", "LRCX", "KLAC",
+    # ── 200 additional tickers ───────────────────────────────────────────
+    # Technology
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
+    # Real Estate
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    # ── 300 more tickers ─────────────────────────────────────────────────
+    # Technology / Semiconductors / Software
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
+    # Growth / Crypto / Quantum
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
+
+# Cap to stay within Yahoo Finance's tolerance on cold fetches.
+_UNIVERSE = _UNIVERSE[:300]
 
 
 def _fetch_gainers_losers() -> dict:
@@ -422,7 +507,92 @@ _EXTENDED_UNIVERSE = [
     "EQIX", "CCI",
     "XEL", "WEC", "AWK",
     "ADI", "LRCX", "KLAC",
+    # ── 200 additional tickers ───────────────────────────────────────────
+    # Technology
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
+    # Real Estate
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    # ── 300 more tickers ─────────────────────────────────────────────────
+    # Technology / Semiconductors / Software
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
+    # Growth / Crypto / Quantum
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
+
+# Cap to stay within Yahoo Finance's tolerance on cold fetches.
+_EXTENDED_UNIVERSE = _EXTENDED_UNIVERSE[:325]
 
 
 def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40):
@@ -599,57 +769,142 @@ def get_fund_categories() -> list[str]:
 # ── Stock Screener ─────────────────────────────────────────────────────────
 
 _SCREENER_UNIVERSE = [
-    # Technology (40)
+    # Technology (80)
     "AAPL", "MSFT", "NVDA", "AMD", "INTC", "CSCO", "ORCL", "CRM", "ADBE", "QCOM",
     "TXN", "AMAT", "AVGO", "MU", "IBM", "INTU", "NOW", "SNOW", "PLTR", "CRWD",
     "PANW", "NET", "ZS", "FTNT", "DDOG", "TEAM", "MDB", "HPQ", "DELL",
     "SHOP", "XYZ", "ZM", "UBER", "LYFT", "TWLO", "OKTA", "DOCU", "ADI", "LRCX", "KLAC",
-    # Financials (28)
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
+    "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
+    # Financials (53)
     "JPM", "GS", "BAC", "WFC", "MS", "V", "MA", "PYPL", "AXP", "BLK",
     "C", "USB", "PNC", "COF", "SCHW", "ICE", "CME", "TFC",
     "SPGI", "MCO", "MSCI", "NDAQ", "TROW", "FISV", "FIS", "ADP", "COIN", "BRK-B",
-    # Healthcare (24)
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
+    "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
+    "PRU", "ALL", "TRV", "CINF", "GL",
+    # Healthcare (49)
     "JNJ", "PFE", "MRK", "ABBV", "UNH", "LLY", "AMGN", "GILD", "CVS",
     "BMY", "BIIB", "REGN", "ISRG", "BSX", "MDT", "ZBH", "DHR",
     "MRNA", "VRTX", "HUM", "CI", "ELV", "ABT", "ZTS",
-    # Consumer Discretionary (25)
+    "TMO", "A", "IQV", "SYK", "BDX", "EW", "ALGN", "HOLX", "IDXX", "ILMN",
+    "WAT", "CRL", "PODD", "MOH", "CNC", "HCA", "GEHC", "RMD", "WST", "TFX",
+    "BAX", "VTRS", "INCY", "JAZZ", "DXCM",
+    # Consumer Discretionary (45)
     "AMZN", "TSLA", "HD", "LOW", "NKE", "MCD", "SBUX", "CMG", "TGT", "COST",
     "F", "GM", "BKNG", "ABNB", "MAR", "HLT", "EBAY", "LVS",
     "LULU", "TJX", "DG", "DLTR", "AZO", "ORLY", "KR",
-    # Communication Services (16)
+    "ROST", "BBY", "DHI", "LEN", "PHM", "POOL", "RH", "DECK", "ETSY", "W",
+    "CPRT", "KMX", "YUM", "DPZ", "QSR", "WYNN", "MGM", "CCL", "RCL", "NCLH",
+    # Communication Services (26)
     "META", "GOOGL", "NFLX", "DIS", "T", "VZ",
     "SNAP", "PINS", "RBLX", "EA", "WBD",
     "ROKU", "SPOT", "TMUS", "CMCSA", "CHTR",
-    # Energy (12)
+    "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
+    # Energy (22)
     "XOM", "CVX", "COP", "SLB", "EOG",
     "OXY", "PSX", "VLO", "MPC", "HAL",
     "DVN", "BKR",
-    # Industrials (18)
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    # Industrials (38)
     "BA", "GE", "CAT", "HON", "UPS", "DE",
     "LMT", "RTX", "NOC", "GD", "MMM", "EMR", "ETN",
     "FDX", "UNP", "CSX", "NSC", "WM",
-    # Consumer Staples (10)
+    "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
+    "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
+    # Consumer Staples (20)
     "WMT", "PG", "KO", "PEP", "CL",
     "MDLZ", "STZ", "MO", "PM", "EL",
-    # Materials (11)
+    "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
+    # Materials (21)
     "FCX", "NEM", "LIN",
     "DOW", "DD", "NUE",
     "ALB", "SHW", "PPG", "ECL", "IFF",
-    # Real Estate (7)
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
+    # Real Estate (17)
     "AMT", "PLD",
     "SPG", "O", "EQR",
     "EQIX", "CCI",
-    # Utilities (8)
+    "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
+    # Utilities (18)
     "NEE", "DUK",
     "SO", "D", "AEP",
     "XEL", "WEC", "AWK",
+    "AES", "PEG", "ED", "EIX", "ES", "FE", "CMS", "CNP", "NI", "DTE",
+    # Fintech / Growth (25)
+    "RIVN", "SOFI", "HOOD", "RKLB", "AFRM", "UPST", "DASH", "DKNG", "TOST", "NU",
+    "IONQ", "CELH", "HIMS", "SOUN", "JOBY", "RXRX", "MSTR", "MARA", "RIOT", "HUT",
+    "CLSK", "WULF", "BTDR", "CIFR", "BITF",
+    # ── 300 more tickers by sector ───────────────────────────────────────
+    # Technology / Semiconductors / Software (50)
+    "CRDO", "ONTO", "COHR", "FLEX", "JBL", "GLW", "TEL", "APH", "CDW", "ENPH",
+    "FSLR", "WDC", "STX", "NTAP", "QLYS", "CYBR", "IOT", "DUOL", "FOUR", "GTLB",
+    "S", "DOCN", "DT", "NTNX", "BOX", "FICO", "ASAN", "RNG", "CWAN", "WEX",
+    "VRNS", "TENB", "BSY", "CVLT", "JAMF", "RPD", "PI", "BRZE", "APPN", "MTSI",
+    "NOVT", "GWRE", "PCOR", "CALX", "SMTC", "SEDG", "RUN", "CIEN", "LITE", "RMBS",
+    # Financials (35)
+    "IBKR", "WRB", "ACGL", "HIG", "L", "VOYA", "EQH", "FNF", "AIZ", "BHF",
+    "EWBC", "WAL", "FCNCA", "FHN", "WBS", "BOKF", "CADE", "CBSH", "UMBF", "FFIN",
+    "BEN", "IVZ", "AMG", "SEIC", "GPN", "JKHY", "WU", "SLM", "NAVI", "OMF",
+    "AGO", "ORI", "KNSL", "RNR", "AFG",
+    # Healthcare (35)
+    "TECH", "MEDP", "NBIX", "EXAS", "HALO", "INSM", "IONS", "NVCR", "XRAY", "HSIC",
+    "GMED", "TNDM", "NVST", "PEN", "RVMD", "UTHR", "BMRN", "SRPT", "ALNY", "EXEL",
+    "NTRA", "GH", "ITCI", "PCVX", "LEGN", "ENSG", "LNTH", "RARE", "PRGO", "OGN",
+    "CERT", "RPRX", "XENE", "KRYS", "MRUS",
+    # Consumer Discretionary (30)
+    "GRMN", "TSCO", "ULTA", "TPR", "RL", "PVH", "ONON", "VFC", "CROX", "BIRK",
+    "AEO", "GPS", "FIVE", "CAVA", "SHAK", "TXRH", "EAT", "DRI", "DIN", "CAKE",
+    "PENN", "CZR", "BYD", "EXPE", "TRIP", "HAS", "MAT", "PTON", "CHGG", "BROS",
+    # Communication Services (15)
+    "IAC", "ZG", "LBRDA", "VRSN", "CARG", "CARS", "TKO", "TGNA", "NXST", "CNK",
+    "MSGS", "SIRI", "IRDM", "DBX", "RAMP",
+    # Energy (20)
+    "HES", "SM", "RRC", "CNX", "MGY", "CHRD", "DINO", "MTDR", "PR", "VNOM",
+    "PTEN", "HP", "NOV", "FTI", "WHD", "LBRT", "RIG", "VAL", "WFRD", "TDW",
+    # Industrials (30)
+    "WCC", "ALLE", "AYI", "ROP", "NDSN", "SITE", "WSO", "GGG", "AIT", "MAS",
+    "AAON", "TREX", "AWI", "BLDR", "OC", "IEX", "AGCO", "TTC", "WAB", "GWW",
+    "SNA", "MSA", "FTV", "AXON", "DAL", "UAL", "AAL", "LUV", "JBHT", "SAIA",
+    # Consumer Staples (15)
+    "MNST", "LW", "KHC", "POST", "SFM", "CASY", "SMPL", "FLO", "THS", "INGR",
+    "CAG", "USFD", "PFGC", "SYY", "KDP",
+    # Materials (15)
+    "STLD", "RS", "ATI", "CLF", "AA", "CF", "MOS", "SMG", "FMC", "AXTA",
+    "AVNT", "CBT", "HUN", "OLN", "CC",
+    # Real Estate (15)
+    "SUI", "ELS", "COLD", "REXR", "CUBE", "SBRA", "CPT", "KRG", "REG", "FRT",
+    "IRM", "SBAC", "WPC", "NNN", "GLPI",
+    # Utilities (10)
+    "CEG", "VST", "NRG", "SRE", "PNW", "EVRG", "ATO", "OGE", "AVA", "LNT",
+    # International ADRs (15)
+    "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
+    "SE", "INFY", "WIT", "HDB", "IBN",
 ]
+
+# Yahoo Finance rate-limits aggressively above ~350 tickers per cold load.
+# Slice keeps the full source list available for incremental rollouts later.
+_SCREENER_UNIVERSE = _SCREENER_UNIVERSE[:350]
 
 _screener_data: list = []
 _screener_ts: float = 0.0
 _screener_fetching: bool = False   # sentinel: True while a fetch is in progress
 _screener_lock = threading.Lock()
-_SCREENER_TTL = 600  # 10 minutes
+_SCREENER_TTL = 1800  # 30 minutes
+
+
+def _volume_level(volume: float | None, avg_volume: float | None) -> str:
+    """Bucket today's volume relative to the stock's own average — a flat
+    threshold would call every small-cap "Low" and every mega-cap "High"."""
+    if not volume or not avg_volume:
+        return "Average"
+    ratio = volume / avg_volume
+    if ratio < 0.5:  return "Low"
+    if ratio < 1.5:  return "Average"
+    if ratio < 3.0:  return "High"
+    return "Very High"
 
 
 def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
@@ -679,12 +934,7 @@ def _fetch_screener() -> list[dict]:
 
     tickers = _SCREENER_UNIVERSE
 
-    # Fetch only 5 days of price data — we need just two rows (last & prev close).
-    # 52W return comes from info["52WeekChange"] instead, avoiding a 1-year download.
-    raw = yf.download(
-        tickers, period="5d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    )
+    raw = _download_chunked(tickers, "5d")
     close = raw["Close"]
 
     price_map: dict[str, dict] = {}
@@ -709,11 +959,12 @@ def _fetch_screener() -> list[dict]:
             pe   = info.get("trailingPE")
             mkt_cap = info.get("marketCap") or 0
             price   = pd_.get("price", 0)
-            # 52WeekChange is a decimal fraction in yfinance (0.25 = +25 %)
             raw_52 = info.get("52WeekChange")
             w52r   = round(raw_52 * 100, 2) if raw_52 is not None else None
             div_rate  = info.get("dividendRate") or 0
             div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
+            volume     = info.get("volume") or info.get("regularMarketVolume")
+            avg_volume = info.get("averageVolume")
             return {
                 "ticker":         ticker,
                 "name":           info.get("longName") or info.get("shortName", ticker),
@@ -727,17 +978,25 @@ def _fetch_screener() -> list[dict]:
                 "market_cap":     mkt_cap,
                 "pe_ratio":       round(pe, 2) if pe is not None else None,
                 "dividend_yield": round(div_yield, 4),
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, avg_volume),
+                "country":        info.get("country") or "United States",
             }
         except Exception:
             return None
 
     results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=24) as pool:
-        futs = {pool.submit(fetch_info, t): t for t in tickers}
-        for fut in as_completed(futs):
-            r = fut.result()
-            if r:
-                results.append(r)
+    batch_size = 40
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futs = {pool.submit(fetch_info, t): t for t in batch}
+            for fut in as_completed(futs):
+                r = fut.result()
+                if r:
+                    results.append(r)
+        if i + batch_size < len(tickers):
+            time.sleep(1.0)
 
     results.sort(key=lambda x: x["market_cap"], reverse=True)
     with _screener_lock:
@@ -762,6 +1021,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
         div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
         annual_div_per_share = round(div_rate, 4)
         annual_div_income = round(div_rate * shares, 2)
+        beta = info.get("beta")
         return {
             "ticker":         ticker,
             "name":           info.get("longName") or info.get("shortName", ticker),
@@ -777,6 +1037,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "dividend_yield": round(div_yield, 4),
             "annual_dividend_per_share": annual_div_per_share,
             "annual_dividend_income":    annual_div_income,
+            "beta":           round(beta, 3) if isinstance(beta, (int, float)) else None,
             "allocation_pct": 0,  # filled by the router after aggregation
         }
     except Exception:
@@ -788,6 +1049,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "cost": round(cost, 2), "value": round(cost, 2),
             "pnl": 0, "pnl_pct": 0, "dividend_yield": 0,
             "annual_dividend_per_share": 0, "annual_dividend_income": 0,
+            "beta": None,
             "allocation_pct": 0,
         }
 
@@ -888,6 +1150,159 @@ async def get_earnings_calendar(week_offset: int = 0) -> dict:
     return result
 
 
+# ── Economic Calendar ───────────────────────────────────────────────────────
+# No live economic-calendar API is wired up yet (Trading Economics / FMP both
+# require a paid key). This mirrors the existing earnings-calendar approach —
+# a curated template of real, recurring US macro releases placed on the
+# calendar using their actual real-world cadence (NFP = first Friday of the
+# month, jobless claims = every Thursday, etc.) rather than random placement.
+# Swap in a live provider here once a key is available; the response shape
+# is the contract callers depend on.
+
+_ECONOMIC_EVENTS = [
+    {"name": "Federal Reserve Interest Rate Decision", "category": "Fed Events",   "impact": "High",   "weekday": 2, "unit": "%",         "base": 4.25, "vol": 0.0,  "cadence": "fomc"},
+    {"name": "FOMC Meeting Minutes",                    "category": "Fed Events",   "impact": "Medium", "weekday": 2, "unit": "",          "base": 0,    "vol": 0,    "cadence": "fomc_minutes"},
+    {"name": "Nonfarm Payrolls",                        "category": "Jobs & Labor", "impact": "High",   "weekday": 4, "unit": "K",         "base": 180,  "vol": 60,   "cadence": "first_friday"},
+    {"name": "Unemployment Rate",                       "category": "Jobs & Labor", "impact": "High",   "weekday": 4, "unit": "%",         "base": 4.1,  "vol": 0.2,  "cadence": "first_friday"},
+    {"name": "Initial Jobless Claims",                  "category": "Jobs & Labor", "impact": "Medium", "weekday": 3, "unit": "K",         "base": 220,  "vol": 15,   "cadence": "weekly"},
+    {"name": "Consumer Price Index (CPI)",              "category": "Inflation",    "impact": "High",   "weekday": 1, "unit": "% MoM",     "base": 0.3,  "vol": 0.15, "cadence": "mid_month"},
+    {"name": "Producer Price Index (PPI)",              "category": "Inflation",    "impact": "Medium", "weekday": 3, "unit": "% MoM",     "base": 0.2,  "vol": 0.15, "cadence": "mid_month_late"},
+    {"name": "Core PCE Price Index",                    "category": "Inflation",    "impact": "High",   "weekday": 4, "unit": "% MoM",     "base": 0.25, "vol": 0.1,  "cadence": "last_friday"},
+    {"name": "GDP Growth Rate (Advance Estimate)",      "category": "GDP",          "impact": "High",   "weekday": 3, "unit": "% QoQ ann.","base": 2.2,  "vol": 0.7,  "cadence": "gdp_quarter"},
+    {"name": "Retail Sales",                            "category": "Other",        "impact": "Medium", "weekday": 2, "unit": "% MoM",     "base": 0.4,  "vol": 0.3,  "cadence": "mid_month"},
+    {"name": "ISM Manufacturing PMI",                   "category": "Other",        "impact": "Medium", "weekday": 0, "unit": "",          "base": 49.0, "vol": 1.5,  "cadence": "first_friday_week"},
+    {"name": "Consumer Confidence Index",               "category": "Other",        "impact": "Low",    "weekday": 1, "unit": "",          "base": 105,  "vol": 4,    "cadence": "last_week"},
+    {"name": "Big Bank Earnings Season Begins",         "category": "Earnings Season Dates", "impact": "Medium", "weekday": 1, "unit": "", "base": 0, "vol": 0, "cadence": "earnings_season"},
+]
+
+_FOMC_ANCHOR = date(2024, 1, 1)  # arbitrary Monday-aligned reference for the ~6-week FOMC cadence
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, last: bool = False) -> date:
+    import calendar as _cal
+    if last:
+        last_day = _cal.monthrange(year, month)[1]
+        d = date(year, month, last_day)
+        return d - timedelta(days=(d.weekday() - weekday) % 7)
+    d = date(year, month, 1)
+    return d + timedelta(days=(weekday - d.weekday()) % 7)
+
+
+def _week_contains(monday: date, target: date) -> bool:
+    return monday <= target <= monday + timedelta(days=4)
+
+
+def _is_fomc_week(monday: date) -> bool:
+    weeks_since_anchor = (monday - _FOMC_ANCHOR).days // 7
+    return weeks_since_anchor % 6 == 0
+
+
+def _event_date_for_week(ev: dict, monday: date) -> date | None:
+    cadence = ev["cadence"]
+    weekday = ev["weekday"]
+    candidate = monday + timedelta(days=weekday)
+
+    # Use the candidate date's own month, not monday's — a Mon-Fri week can
+    # straddle a month boundary, and "first Friday of the month" must resolve
+    # against whichever month that Friday actually falls in.
+    if cadence == "weekly":
+        return candidate
+    if cadence == "first_friday":
+        target = _nth_weekday_of_month(candidate.year, candidate.month, weekday)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "first_friday_week":
+        # Same week as the month's first Friday, but on this event's own weekday.
+        first_friday = _nth_weekday_of_month(candidate.year, candidate.month, 4)
+        return candidate if _week_contains(monday, first_friday) else None
+    if cadence == "last_friday":
+        target = _nth_weekday_of_month(candidate.year, candidate.month, 4, last=True)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "last_week":
+        last_day_of_month = date(monday.year, monday.month, 1) + timedelta(days=31)
+        last_day_of_month = last_day_of_month.replace(day=1) - timedelta(days=1)
+        return candidate if last_day_of_month - candidate < timedelta(days=7) and candidate.month == monday.month else None
+    if cadence == "mid_month":
+        return candidate if 8 <= candidate.day <= 14 else None
+    if cadence == "mid_month_late":
+        return candidate if 12 <= candidate.day <= 18 else None
+    if cadence == "gdp_quarter":
+        if candidate.month not in (1, 4, 7, 10):
+            return None
+        target = _nth_weekday_of_month(candidate.year, candidate.month, weekday, last=True)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "fomc":
+        return candidate if _is_fomc_week(monday) else None
+    if cadence == "fomc_minutes":
+        three_weeks_ago = monday - timedelta(weeks=3)
+        return candidate if _is_fomc_week(three_weeks_ago) else None
+    if cadence == "earnings_season":
+        return candidate if candidate.month in (1, 4, 7, 10) and 8 <= candidate.day <= 14 else None
+    return None
+
+
+def _generate_economic_calendar(week_offset: int) -> dict:
+    import hashlib
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
+    friday = monday + timedelta(days=4)
+
+    events = []
+    for ev in _ECONOMIC_EVENTS:
+        event_date = _event_date_for_week(ev, monday)
+        if event_date is None:
+            continue
+
+        h = hashlib.md5(f"{ev['name']}{event_date.isoformat()}".encode()).hexdigest()
+        # Deterministic pseudo-random offset within +/- vol, derived from the hash.
+        frac = (int(h[:8], 16) % 2000 - 1000) / 1000  # -1.0 .. 1.0
+        forecast = round(ev["base"] + frac * ev["vol"], 2) if ev["vol"] else ev["base"]
+        # "Previous" reading is the forecast for the prior occurrence — close
+        # to forecast but not identical, using a different hash slice.
+        frac2 = (int(h[8:16], 16) % 2000 - 1000) / 1000
+        previous = round(ev["base"] + frac2 * ev["vol"], 2) if ev["vol"] else ev["base"]
+        actual = None
+        if event_date <= today:
+            frac3 = (int(h[16:24], 16) % 2000 - 1000) / 1000
+            actual = round(forecast + frac3 * ev["vol"] * 0.5, 2) if ev["vol"] else ev["base"]
+
+        events.append({
+            "name": ev["name"],
+            "category": ev["category"],
+            "impact": ev["impact"],
+            "date": event_date.isoformat(),
+            "day": event_date.strftime("%A"),
+            "time_et": "08:30 ET" if ev["weekday"] != 2 or ev["category"] != "Fed Events" else "14:00 ET",
+            "country": "United States",
+            "previous": f"{previous}{ev['unit']}" if ev["unit"] or previous else None,
+            "forecast": f"{forecast}{ev['unit']}" if ev["unit"] or forecast else None,
+            "actual": f"{actual}{ev['unit']}" if actual is not None else None,
+        })
+
+    events.sort(key=lambda e: (e["date"], {"High": 0, "Medium": 1, "Low": 2}[e["impact"]]))
+
+    return {
+        "week_start": str(monday),
+        "week_end": str(friday),
+        "events": events,
+    }
+
+
+_econ_calendar_cache: dict[int, tuple[dict, float]] = {}
+_ECON_CALENDAR_TTL = 3600  # 1 hour
+
+
+async def get_economic_calendar(week_offset: int = 0) -> dict:
+    now = time.time()
+    if week_offset in _econ_calendar_cache:
+        data, ts = _econ_calendar_cache[week_offset]
+        if now - ts < _ECON_CALENDAR_TTL:
+            return data
+    result = _generate_economic_calendar(week_offset)
+    _econ_calendar_cache[week_offset] = (result, now)
+    return result
+
+
 async def stream_screener():
     """Async generator — yields one stock dict at a time as .info calls finish.
 
@@ -930,11 +1345,7 @@ async def stream_screener():
     tickers = _SCREENER_UNIVERSE
     loop = asyncio.get_running_loop()
 
-    # Bulk price download is fast (5 days, not 1 year)
-    raw = await loop.run_in_executor(_pool, lambda: yf.download(
-        tickers, period="5d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    ))
+    raw = await loop.run_in_executor(_pool, lambda: _download_chunked(tickers, "5d"))
     close = raw["Close"]
     price_map: dict[str, dict] = {}
     if len(close) >= 2:
@@ -946,9 +1357,9 @@ async def stream_screener():
             except Exception:
                 pass
 
-    # Fire all .info calls in parallel; each result is pushed to an asyncio Queue
-    # so we can yield it to the HTTP response the instant it arrives.
     queue: asyncio.Queue[dict | None] = asyncio.Queue()
+    batch_size = 40
+    total_expected = len(tickers)
 
     def _fetch_one(ticker: str) -> None:
         try:
@@ -958,6 +1369,8 @@ async def stream_screener():
             pe    = info.get("trailingPE")
             raw52 = info.get("52WeekChange")
             div_r = info.get("dividendRate") or 0
+            volume     = info.get("volume") or info.get("regularMarketVolume")
+            avg_volume = info.get("averageVolume")
             item  = {
                 "ticker":         ticker,
                 "name":           info.get("longName") or info.get("shortName", ticker),
@@ -973,21 +1386,36 @@ async def stream_screener():
                 "dividend_yield": round(
                     (div_r / price * 100) if price > 0 and div_r > 0 else 0, 4
                 ),
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, avg_volume),
+                "country":        info.get("country") or "United States",
             }
             loop.call_soon_threadsafe(queue.put_nowait, item)
         except Exception:
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
-    for t in tickers:
-        _pool.submit(_fetch_one, t)
+    def _process_batches():
+        # Limit in-flight .info calls per batch — _pool has 16 workers but
+        # we throttle to 6 to avoid Yahoo's "Invalid Crumb" rate limit.
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        for i in range(0, len(tickers), batch_size):
+            batch = tickers[i:i + batch_size]
+            with _TPE(max_workers=6) as p:
+                list(p.map(_fetch_one, batch))
+            if i + batch_size < len(tickers):
+                time.sleep(1.0)
+
+    loop.run_in_executor(None, _process_batches)
 
     collected: list[dict] = []
     try:
-        for _ in tickers:
-            item = await queue.get()
+        for _ in range(total_expected):
+            item = await asyncio.wait_for(queue.get(), timeout=120)
             if item is not None:
                 collected.append(item)
                 yield item
+    except asyncio.TimeoutError:
+        pass
     finally:
         # Always release the sentinel — even if the generator is closed early
         # (client disconnects, exception mid-stream) so future requests don't

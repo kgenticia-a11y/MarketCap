@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # publicly exposed on the live server.
     is_production: bool = False
 
-    # Anthropic API key for AI portfolio analysis.
-    anthropic_api_key: str = ""
+    # Google Gemini API key for AI portfolio analysis.
+    gemini_api_key: str = ""
 
     class Config:
         env_file = ".env"
