@@ -13,12 +13,14 @@ import {
   Briefcase,
   Clock,
   Landmark,
+  Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
 import { getMarketUpdate, getEarningsCalendar, getEconomicCalendar } from "../api/stocks";
 import { getWatchlist, addToWatchlist } from "../api/watchlist";
 import { getPortfolio } from "../api/portfolio";
+import EarningsBriefModal from "../components/EarningsBriefModal";
 
 /* ── Shared types ──────────────────────────────────────────────────────── */
 
@@ -298,6 +300,7 @@ function BeatBadge({ history }: { history: string }) {
 function EarningsTab() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [filter, setFilter] = useState<EarningsFilter>("all");
+  const [briefTarget, setBriefTarget] = useState<{ company: EarningsCompany; date: string } | null>(null);
   const queryClient = useQueryClient();
 
   const { data: earningsData, isLoading, isError } = useQuery<EarningsData>({
@@ -464,6 +467,15 @@ function EarningsTab() {
                         </div>
                       </div>
 
+                      {/* AI Brief button */}
+                      <button
+                        onClick={() => setBriefTarget({ company: c, date: dateStr })}
+                        className="w-full flex items-center justify-center gap-1 text-[10px] font-semibold text-accent-light hover:text-white py-1.5 rounded-md border border-accent/30 hover:border-accent/60 bg-accent/5 transition-colors"
+                      >
+                        <Sparkles size={10} />
+                        AI Brief
+                      </button>
+
                       {/* Watch button */}
                       {!watchlistTickers.has(c.ticker) ? (
                         <button
@@ -488,6 +500,14 @@ function EarningsTab() {
           );
         })}
       </div>
+
+      {briefTarget && (
+        <EarningsBriefModal
+          company={briefTarget.company}
+          date={briefTarget.date}
+          onClose={() => setBriefTarget(null)}
+        />
+      )}
     </div>
   );
 }

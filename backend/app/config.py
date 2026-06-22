@@ -63,8 +63,13 @@ class Settings(BaseSettings):
     # publicly exposed on the live server.
     is_production: bool = False
 
-    # Google Gemini API key for AI portfolio analysis.
+    # Google Gemini API key for AI portfolio analysis. (legacy — superseded by Claude)
     gemini_api_key: str = ""
+
+    # Anthropic Claude API key, powers all "AI co-pilot" features: portfolio
+    # analysis, the dashboard daily brief, chart analysis, earnings briefs,
+    # and the app-wide chat assistant. Endpoints return 503 until this is set.
+    anthropic_api_key: str = ""
 
     class Config:
         env_file = ".env"

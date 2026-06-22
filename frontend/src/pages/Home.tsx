@@ -3,6 +3,7 @@ import { getMarketOverview } from "../api/stocks";
 import { getNews } from "../api/news";
 import NewsCard from "../components/NewsCard";
 import ErrorBoundary from "../components/ErrorBoundary";
+import DailyBriefCard from "../components/DailyBriefCard";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useNavigate } from "react-router-dom";
@@ -92,6 +93,9 @@ export default function Home() {
           ))}
         </div>
       )}
+
+      {/* AI Daily Brief */}
+      <DailyBriefCard />
 
       {/* Gainers & Losers */}
       <div className="grid grid-cols-2 gap-4">

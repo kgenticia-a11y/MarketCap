@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -6,6 +6,7 @@ import {
   addToPortfolio, updatePortfolioItem, analyzePortfolio, getPortfolioHealthScore,
 } from "../api/portfolio";
 import type { RiskProfile } from "../api/portfolio";
+import { listAccounts, type UserAccount } from "../api/accounts";
 import { getQuote } from "../api/stocks";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -24,13 +25,17 @@ import {
 } from "recharts";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
-interface PortfolioItem { id: number; ticker: string; shares: number; avg_buy_price: number; }
+interface PortfolioItem {
+  id: number; ticker: string; shares: number; avg_buy_price: number;
+  account_id?: number | null; account_name?: string | null;
+}
 interface Holding {
   ticker: string; name: string; sector: string;
   shares: number; avg_buy_price: number; current_price: number;
   cost: number; value: number; pnl: number; pnl_pct: number; allocation_pct: number;
   dividend_yield: number; annual_dividend_per_share: number; annual_dividend_income: number;
   beta: number | null;
+  account_id?: number | null; account_name?: string | null;
 }
 interface Snapshot { date: string; value: number; cost: number; }
 interface BenchmarkPoint { date: string; close: number; }
@@ -195,16 +200,30 @@ function RiskProfileModal({ onSave, onClose }: { onSave: (rp: RiskProfile) => vo
 }
 
 /* ── Add Position Form ─────────────────────────────────────────────────── */
-function AddPositionForm({ onAdded }: { onAdded: () => void }) {
+function AddPositionForm({
+  onAdded, accounts, defaultAccountId,
+}: {
+  onAdded: () => void;
+  accounts: { id: number; name: string }[];
+  defaultAccountId: number | null;
+}) {
   const [open, setOpen] = useState(false);
   const [ticker, setTicker] = useState("");
   const [shares, setShares] = useState("");
   const [price, setPrice] = useState("");
+  const [accountId, setAccountId] = useState<number | "">(defaultAccountId ?? "");
   const [err, setErr] = useState("");
   const qc = useQueryClient();
 
+  useEffect(() => {
+    setAccountId(defaultAccountId ?? "");
+  }, [defaultAccountId]);
+
   const add = useMutation({
-    mutationFn: () => addToPortfolio(ticker.trim().toUpperCase(), parseFloat(shares), parseFloat(price)),
+    mutationFn: () => addToPortfolio(
+      ticker.trim().toUpperCase(), parseFloat(shares), parseFloat(price),
+      accountId === "" ? null : accountId,
+    ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
@@ -243,7 +262,7 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
         <p className="text-xs font-semibold text-white">New Position</p>
         <button onClick={() => setOpen(false)} className="text-muted hover:text-white"><X size={15} /></button>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className={clsx("grid gap-3", accounts.length > 0 ? "grid-cols-4" : "grid-cols-3")}>
         <div>
           <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Ticker</label>
           <input value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} placeholder="AAPL"
@@ -259,6 +278,18 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
           <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="150.00"
             className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
         </div>
+        {accounts.length > 0 && (
+          <div>
+            <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Account</label>
+            <select
+              value={accountId === null ? "" : accountId}
+              onChange={e => setAccountId(e.target.value === "" ? "" : parseInt(e.target.value))}
+              className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent">
+              <option value="">Unassigned</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+        )}
       </div>
       {err && <p className="text-xs text-negative mt-2">{err}</p>}
       <div className="flex gap-2 mt-3">
@@ -471,10 +502,10 @@ interface HealthScoreData {
 const LEVEL_COLOR: Record<string, string> = { healthy: "#10b981", caution: "#f59e0b", risk: "#ef4444" };
 const GRADE_COLOR: Record<string, string> = { A: "#10b981", B: "#10b981", C: "#f59e0b", D: "#f97316", F: "#ef4444" };
 
-function HealthScoreCard() {
+function HealthScoreCard({ accountId }: { accountId: number | null }) {
   const { data, isLoading } = useQuery<HealthScoreData>({
-    queryKey: ["portfolio-health-score"],
-    queryFn: getPortfolioHealthScore,
+    queryKey: ["portfolio-health-score", accountId],
+    queryFn: () => getPortfolioHealthScore(accountId),
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
   });
@@ -851,7 +882,7 @@ function AIAnalysisPanel({
           </div>
           <div>
             <p className="text-sm font-bold text-white">AI Portfolio Analysis</p>
-            <p className="text-[10px] text-muted">Powered by Gemini</p>
+            <p className="text-[10px] text-muted">Powered by Claude</p>
           </div>
         </div>
         <button onClick={run} disabled={loading || holdings.length === 0}
@@ -961,10 +992,10 @@ function AIAnalysisPanel({
 }
 
 /* ── Analytics section ─────────────────────────────────────────────────── */
-function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
+function AnalyticsPanel({ riskProfile, accountId }: { riskProfile: RiskProfile | null; accountId: number | null }) {
   const { data: analytics, isLoading, isError } = useQuery({
-    queryKey: ["portfolio-analytics"],
-    queryFn: getPortfolioAnalytics,
+    queryKey: ["portfolio-analytics", accountId],
+    queryFn: () => getPortfolioAnalytics(accountId),
     staleTime: 2 * 60_000,
     gcTime: 5 * 60_000,
   });
@@ -1011,7 +1042,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
       <div className="grid grid-cols-3 gap-4">
         <AllocationPie data={holdingPie} title="Allocation — By Holding" />
         <AllocationPie data={sectorPie} title="Allocation — By Sector" />
-        <HealthScoreCard />
+        <HealthScoreCard accountId={accountId} />
       </div>
 
       <DividendCard holdings={holdings} />
@@ -1036,7 +1067,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
 }
 
 /* ── Holdings table row ────────────────────────────────────────────────── */
-function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { item: PortfolioItem; onCreateAlert: (ticker: string) => void; dividendInfo?: { dividend_yield: number; annual_dividend_income: number }; spyChangePct: number | null }) {
+function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct, showAccount }: { item: PortfolioItem; onCreateAlert: (ticker: string) => void; dividendInfo?: { dividend_yield: number; annual_dividend_income: number }; spyChangePct: number | null; showAccount?: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [editShares, setEditShares] = useState(String(item.shares));
@@ -1059,7 +1090,7 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { ite
   const positive = pnl >= 0;
 
   const del = useMutation({
-    mutationFn: () => removeFromPortfolio(item.ticker),
+    mutationFn: () => removeFromPortfolio(item.ticker, item.account_id ?? null),
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: ["portfolio"] });
       const prev = qc.getQueryData<{ items?: { ticker: string }[] }>(["portfolio"]);
@@ -1072,7 +1103,7 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { ite
   });
 
   const editMut = useMutation({
-    mutationFn: () => updatePortfolioItem(item.ticker, parseFloat(editShares), parseFloat(editPrice)),
+    mutationFn: () => updatePortfolioItem(item.ticker, parseFloat(editShares), parseFloat(editPrice), item.account_id ?? null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
@@ -1086,6 +1117,9 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { ite
     return (
       <tr className="border-b border-border/50 bg-surface-hover/30">
         <td className="py-2 px-5 font-semibold text-sm text-white">{item.ticker}</td>
+        {showAccount && (
+          <td className="py-2 px-4 text-xs text-muted">{item.account_name ?? "—"}</td>
+        )}
         <td className="py-2 px-4 text-right">
           <input value={editShares} onChange={e => setEditShares(e.target.value)} type="number"
             className="w-20 bg-surface border border-border rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-accent" />
@@ -1126,6 +1160,13 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct }: { ite
           {item.ticker}
         </Link>
       </td>
+      {showAccount && (
+        <td className="py-3 px-4 text-xs">
+          {item.account_name ? (
+            <span className="inline-block bg-surface-hover text-muted px-2 py-0.5 rounded-full">{item.account_name}</span>
+          ) : <span className="text-muted">—</span>}
+        </td>
+      )}
       <td className="py-3 px-4 text-right text-sm text-white">{item.shares}</td>
       <td className="py-3 px-4 text-right text-sm text-white">
         {priceLoaded ? `$${price.toFixed(2)}` : <span className="text-muted">—</span>}
@@ -1225,6 +1266,15 @@ export default function Portfolio() {
   const [riskProfile, setRiskProfile] = useState<RiskProfile | null>(getRiskProfile);
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [alertTicker, setAlertTicker] = useState<string | null>(null);
+  // null = aggregate "All Accounts" view; otherwise filter to that account.
+  const [accountId, setAccountId] = useState<number | null>(null);
+
+  const { data: accounts = [] } = useQuery<UserAccount[]>({
+    queryKey: ["accounts"],
+    queryFn: listAccounts,
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["portfolio"],
@@ -1233,8 +1283,8 @@ export default function Portfolio() {
   });
 
   const { data: analytics } = useQuery({
-    queryKey: ["portfolio-analytics"],
-    queryFn: getPortfolioAnalytics,
+    queryKey: ["portfolio-analytics", accountId],
+    queryFn: () => getPortfolioAnalytics(accountId),
     staleTime: 2 * 60_000,
     enabled: !!user,
   });
@@ -1274,7 +1324,12 @@ export default function Portfolio() {
     );
   }
 
-  const items: PortfolioItem[] = data?.items ?? [];
+  const allItems: PortfolioItem[] = data?.items ?? [];
+  const items = useMemo(
+    () => accountId === null ? allItems : allItems.filter(i => i.account_id === accountId),
+    [allItems, accountId],
+  );
+  const showAccountColumn = accountId === null && accounts.length > 0;
 
   if (isLoading) {
     return (
@@ -1302,6 +1357,17 @@ export default function Portfolio() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-white">Portfolio</h1>
+          {accounts.length > 0 && (
+            <select
+              value={accountId === null ? "" : accountId}
+              onChange={e => setAccountId(e.target.value === "" ? null : parseInt(e.target.value))}
+              className="bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-accent">
+              <option value="">All Accounts (Aggregate)</option>
+              {accounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setShowRiskModal(true)}
             className={clsx(
@@ -1321,7 +1387,13 @@ export default function Portfolio() {
               <Download size={13} /> Export CSV
             </button>
           )}
-          <AddPositionForm onAdded={() => qc.invalidateQueries({ queryKey: ["portfolio-analytics"] })} />
+          <AddPositionForm
+            accounts={accounts}
+            defaultAccountId={accountId}
+            onAdded={() => {
+              qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
+              qc.invalidateQueries({ queryKey: ["portfolio"] });
+            }} />
         </div>
       </div>
 
@@ -1333,7 +1405,7 @@ export default function Portfolio() {
       ) : (
         <>
           <PortfolioSummary items={items} />
-          <AnalyticsPanel riskProfile={riskProfile} />
+          <AnalyticsPanel riskProfile={riskProfile} accountId={accountId} />
 
           <div className="bg-surface rounded-xl border border-border overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
@@ -1343,17 +1415,29 @@ export default function Portfolio() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
-                  {["Ticker","Shares","Current","Avg Cost","Value","Div Yield","Annual Div","vs SPY","P&L",""].map(h => (
+                  {[
+                    "Ticker",
+                    ...(showAccountColumn ? ["Account"] : []),
+                    "Shares","Current","Avg Cost","Value","Div Yield","Annual Div","vs SPY","P&L","",
+                  ].map(h => (
                     <th key={h} className={clsx("py-3 text-muted font-medium",
                       h === "" ? "px-5" : "px-4",
-                      h === "Ticker" ? "text-left px-5" : "text-right")}>
+                      h === "Ticker" ? "text-left px-5" : h === "Account" ? "text-left" : "text-right")}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {items.map(item => <PortfolioRow key={item.id} item={item} onCreateAlert={setAlertTicker} dividendInfo={divMap.get(item.ticker)} spyChangePct={spyChangePct} />)}
+                {items.map(item => (
+                  <PortfolioRow
+                    key={item.id} item={item}
+                    onCreateAlert={setAlertTicker}
+                    dividendInfo={divMap.get(item.ticker)}
+                    spyChangePct={spyChangePct}
+                    showAccount={showAccountColumn}
+                  />
+                ))}
               </tbody>
             </table>
           </div>

@@ -316,16 +316,14 @@ _UNIVERSE = [
     "CLSK", "WULF", "BTDR", "CIFR", "BITF",
 ]
 
-# Cap to stay within Yahoo Finance's tolerance on cold fetches.
-_UNIVERSE = _UNIVERSE[:300]
+# Cap to stay within Yahoo Finance's tolerance on cold fetches. Chunked via
+# _download_chunked below, so this can safely cover the full universe.
+_UNIVERSE = _UNIVERSE[:600]
 
 
 def _fetch_gainers_losers() -> dict:
     # Download 2 days so we can compute prev-close → last-close change
-    raw = yf.download(
-        _UNIVERSE, period="2d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    )
+    raw = _download_chunked(_UNIVERSE, period="2d")
     close = raw["Close"]
     if len(close) < 2:
         return {"gainers": [], "losers": []}
@@ -592,7 +590,7 @@ _EXTENDED_UNIVERSE = [
 ]
 
 # Cap to stay within Yahoo Finance's tolerance on cold fetches.
-_EXTENDED_UNIVERSE = _EXTENDED_UNIVERSE[:325]
+_EXTENDED_UNIVERSE = _EXTENDED_UNIVERSE[:600]
 
 
 def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40):
@@ -884,9 +882,9 @@ _SCREENER_UNIVERSE = [
     "SE", "INFY", "WIT", "HDB", "IBN",
 ]
 
-# Yahoo Finance rate-limits aggressively above ~350 tickers per cold load.
-# Slice keeps the full source list available for incremental rollouts later.
-_SCREENER_UNIVERSE = _SCREENER_UNIVERSE[:350]
+# Batched via the chunked-download + bounded-info helpers below, so this can
+# safely cover most of the source list without tripping Yahoo's rate limits.
+_SCREENER_UNIVERSE = _SCREENER_UNIVERSE[:600]
 
 _screener_data: list = []
 _screener_ts: float = 0.0

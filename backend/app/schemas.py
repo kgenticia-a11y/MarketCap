@@ -64,6 +64,7 @@ class PortfolioItemCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
     shares: float = Field(..., gt=0)
     avg_buy_price: float = Field(..., gt=0)
+    account_id: Optional[int] = None
 
 
 class PortfolioItemOut(BaseModel):
@@ -72,6 +73,32 @@ class PortfolioItemOut(BaseModel):
     shares: float
     avg_buy_price: float
     added_at: datetime
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+# --- User Accounts (multi-account aggregation) ---
+
+AccountType = Literal["brokerage", "retirement", "crypto", "other"]
+
+
+class UserAccountCreate(BaseModel):
+    name: str         = Field(..., min_length=1, max_length=40)
+    type: AccountType = "brokerage"
+
+
+class UserAccountUpdate(BaseModel):
+    name: Optional[str]         = Field(None, min_length=1, max_length=40)
+    type: Optional[AccountType] = None
+
+
+class UserAccountOut(BaseModel):
+    id: int
+    name: str
+    type: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -80,6 +107,32 @@ class PortfolioOut(BaseModel):
     id: int
     name: str
     items: list[PortfolioItemOut]
+
+    model_config = {"from_attributes": True}
+
+
+# --- Paper Trading ---
+
+class PaperPortfolioSetup(BaseModel):
+    starting_cash: float = Field(..., gt=0, le=10_000_000)
+
+
+class PaperTradeCreate(BaseModel):
+    ticker:    str   = Field(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
+    side:      Literal["buy", "sell"]
+    # Exactly one of `shares` or `dollar_amount` must be provided.
+    shares:        Optional[float] = Field(None, gt=0)
+    dollar_amount: Optional[float] = Field(None, gt=0)
+
+
+class PaperTradeOut(BaseModel):
+    id: int
+    ticker: str
+    side: str
+    shares: float
+    price: float
+    total: float
+    executed_at: datetime
 
     model_config = {"from_attributes": True}
 

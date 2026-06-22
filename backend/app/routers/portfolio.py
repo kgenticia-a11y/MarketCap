@@ -4,14 +4,14 @@ import logging
 from datetime import date as date_type, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.config import settings
 from app.database import get_db
-from app.services import market_data, health_score
+from app.services import market_data, health_score, claude
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +35,21 @@ def _get_portfolio(user: models.User, db: Session) -> models.Portfolio:
     return portfolio
 
 
+def _filter_items_by_account(items, account_id: int | None):
+    """Filter PortfolioItem rows by account_id. None means 'all accounts'."""
+    if account_id is None:
+        return list(items)
+    return [i for i in items if i.account_id == account_id]
+
+
 @router.get("/analytics")
 async def get_analytics(
+    account_id: int | None = Query(None, description="Filter to a single account; omit for aggregate."),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     portfolio = _get_or_create_portfolio(current_user, db)
-    items = portfolio.items
+    items = _filter_items_by_account(portfolio.items, account_id)
     if not items:
         return {"holdings": [], "snapshots": [], "total_cost": 0, "total_value": 0,
                 "total_pnl": 0, "total_pnl_pct": 0}
@@ -51,6 +59,12 @@ async def get_analytics(
         for i in items
     ]
     holdings = await market_data.get_portfolio_analytics(item_dicts)
+    # Re-attach account info — get_portfolio_analytics preserves order, so we
+    # can zip back. (Items whose fetch failed are dropped, but we filter them
+    # back out below to keep the mapping aligned.)
+    for h, src in zip(holdings, items):
+        h["account_id"]   = src.account_id
+        h["account_name"] = src.account_name
 
     total_cost  = sum(h["cost"]  for h in holdings)
     total_value = sum(h["value"] for h in holdings)
@@ -135,11 +149,12 @@ async def get_analytics(
 
 @router.get("/health-score")
 async def get_health_score(
+    account_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     portfolio = _get_or_create_portfolio(current_user, db)
-    items = portfolio.items
+    items = _filter_items_by_account(portfolio.items, account_id)
     if not items:
         result = health_score.compute_health_score([], 0)
         return {**result, "history": []}
@@ -210,6 +225,20 @@ def get_portfolio(
     return _get_or_create_portfolio(current_user, db)
 
 
+def _resolve_account(current_user: models.User, account_id: int | None, db: Session):
+    """Validate the account belongs to the current user, return (id, name)."""
+    if account_id is None:
+        return None, None
+    acc = (
+        db.query(models.UserAccount)
+        .filter_by(id=account_id, user_id=current_user.id)
+        .first()
+    )
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    return acc.id, acc.name
+
+
 @router.post("/items", response_model=schemas.PortfolioItemOut, status_code=201)
 def add_item(
     body: schemas.PortfolioItemCreate,
@@ -217,9 +246,10 @@ def add_item(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     portfolio = _get_or_create_portfolio(current_user, db)
+    acc_id, acc_name = _resolve_account(current_user, body.account_id, db)
     existing = (
         db.query(models.PortfolioItem)
-        .filter_by(portfolio_id=portfolio.id, ticker=body.ticker.upper())
+        .filter_by(portfolio_id=portfolio.id, ticker=body.ticker.upper(), account_id=acc_id)
         .first()
     )
     if existing:
@@ -238,6 +268,8 @@ def add_item(
         ticker=body.ticker.upper(),
         shares=body.shares,
         avg_buy_price=body.avg_buy_price,
+        account_id=acc_id,
+        account_name=acc_name,
     )
     db.add(item)
     db.commit()
@@ -248,15 +280,17 @@ def add_item(
 @router.delete("/items/{ticker}", status_code=204)
 def remove_item(
     ticker: str,
+    account_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     portfolio = _get_portfolio(current_user, db)
-    item = (
-        db.query(models.PortfolioItem)
-        .filter_by(portfolio_id=portfolio.id, ticker=ticker.upper())
-        .first()
+    q = db.query(models.PortfolioItem).filter_by(
+        portfolio_id=portfolio.id, ticker=ticker.upper()
     )
+    if account_id is not None:
+        q = q.filter(models.PortfolioItem.account_id == account_id)
+    item = q.first()
     if not item:
         raise HTTPException(404, "Ticker not in portfolio")
     db.delete(item)
@@ -275,14 +309,6 @@ async def analyze_portfolio(
     body: AnalyzeRequest,
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if not settings.gemini_api_key:
-        raise HTTPException(503, "AI analysis is not configured on this server.")
-
-    try:
-        from google import genai
-    except ImportError:
-        raise HTTPException(503, "Google GenAI SDK not installed.")
-
     risk_ctx = ""
     if body.risk_profile:
         rp = body.risk_profile
@@ -302,7 +328,7 @@ async def analyze_portfolio(
         for h in body.holdings
     )
 
-    prompt = f"""You are a professional portfolio analyst. Analyze the following investment portfolio and provide structured, actionable insights.{risk_ctx}
+    prompt = f"""Analyze the following investment portfolio and provide structured, actionable insights.{risk_ctx}
 
 Portfolio total value: ${body.total_value:,.2f}
 Overall return: {'+' if body.total_pnl_pct >= 0 else ''}{body.total_pnl_pct:.2f}%
@@ -323,21 +349,17 @@ Respond in the following JSON structure (no markdown, pure JSON):
   "beginner_explanation": "Plain-language paragraph suitable for a first-time investor explaining the portfolio's current state and what they should know"
 }}"""
 
-    client = genai.Client(api_key=settings.gemini_api_key)
     try:
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model="gemini-2.5-flash",
-            contents=prompt,
+        text = await claude.ask_claude_text(
+            system="You are a professional portfolio analyst. Always respond with pure JSON, no markdown fences.",
+            prompt=prompt,
+            max_tokens=1536,
         )
-    except Exception as exc:
-        logger.error("Gemini API call failed: %s", exc)
+    except claude.ClaudeNotConfigured:
+        raise HTTPException(503, "AI analysis is not configured on this server.")
+    except claude.ClaudeRequestError:
         raise HTTPException(502, "AI analysis request failed.")
 
-    if not response.text:
-        raise HTTPException(502, "AI returned an empty response.")
-
-    text = response.text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:
@@ -350,15 +372,17 @@ Respond in the following JSON structure (no markdown, pure JSON):
 def update_item(
     ticker: str,
     body: schemas.PortfolioItemCreate,
+    account_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     portfolio = _get_portfolio(current_user, db)
-    item = (
-        db.query(models.PortfolioItem)
-        .filter_by(portfolio_id=portfolio.id, ticker=ticker.upper())
-        .first()
+    q = db.query(models.PortfolioItem).filter_by(
+        portfolio_id=portfolio.id, ticker=ticker.upper()
     )
+    if account_id is not None:
+        q = q.filter(models.PortfolioItem.account_id == account_id)
+    item = q.first()
     if not item:
         raise HTTPException(404, "Ticker not in portfolio")
     item.shares = body.shares

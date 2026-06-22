@@ -1,0 +1,382 @@
+import asyncio
+import json
+import logging
+from datetime import date as date_type, datetime, timedelta, timezone
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app import models, auth
+from app.database import get_db
+from app.routers.portfolio import _get_or_create_portfolio
+from app.services import market_data, claude
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+def _claude_error_to_http(exc: Exception):
+    if isinstance(exc, claude.ClaudeNotConfigured):
+        raise HTTPException(503, "AI features are not configured on this server.")
+    if isinstance(exc, claude.ClaudeRequestError):
+        raise HTTPException(502, "AI request failed. Please try again.")
+    raise
+
+
+async def _user_holdings(current_user: models.User, db: Session) -> list[dict]:
+    portfolio = _get_or_create_portfolio(current_user, db)
+    if not portfolio.items:
+        return []
+    item_dicts = [
+        {"ticker": i.ticker, "shares": i.shares, "avg_buy_price": i.avg_buy_price}
+        for i in portfolio.items
+    ]
+    return await market_data.get_portfolio_analytics(item_dicts)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 4.1 — Dashboard Daily Brief
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.get("/daily-brief")
+async def daily_brief(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    holdings = await _user_holdings(current_user, db)
+
+    total_value = sum(h["value"] for h in holdings)
+    total_cost = sum(h["cost"] for h in holdings)
+    total_pnl_pct = ((total_value - total_cost) / total_cost * 100) if total_cost else 0.0
+
+    indices, market_update = await asyncio.gather(
+        market_data.get_market_indices(),
+        market_data.get_market_update(),
+    )
+    index_lines = "\n".join(
+        f"- {idx['ticker']}: {'+' if idx['change_pct'] >= 0 else ''}{idx['change_pct']:.2f}%"
+        for idx in indices
+    )
+    top_sectors = sorted(market_update.get("sectors", []), key=lambda s: abs(s["change_pct"]), reverse=True)[:3]
+    sector_lines = "\n".join(
+        f"- {s['name']}: {'+' if s['change_pct'] >= 0 else ''}{s['change_pct']:.2f}%"
+        for s in top_sectors
+    )
+
+    holdings_lines = "\n".join(
+        f"- {h['ticker']} ({h['name']}): {h['shares']} sh, ${h['value']:,.2f} value, "
+        f"P&L {'+' if h['pnl'] >= 0 else ''}{h['pnl_pct']:.2f}%"
+        for h in holdings
+    ) or "(no holdings yet)"
+
+    # Upcoming earnings (next 7 days) for held tickers.
+    held_tickers = {h["ticker"] for h in holdings}
+    earnings_lines = []
+    if held_tickers:
+        today = date_type.today()
+        for week_offset in (0, 1):
+            cal = await market_data.get_earnings_calendar(week_offset)
+            for day in cal.get("days", {}).values():
+                day_date = date_type.fromisoformat(day["date"])
+                if 0 <= (day_date - today).days <= 7:
+                    for comp in day["companies"]:
+                        if comp["ticker"] in held_tickers:
+                            earnings_lines.append(
+                                f"- {comp['ticker']} ({comp['name']}) reports {comp['time']} on "
+                                f"{day['date']}: EPS est ${comp['eps_estimate']:.2f} vs "
+                                f"${comp['eps_actual_prev']:.2f} last quarter, beat history {comp['beat_history']}"
+                            )
+
+    # Alerts: triggered or within 2% of target.
+    alerts = db.query(models.PriceAlert).filter(models.PriceAlert.user_id == current_user.id).all()
+    alert_lines = []
+    if alerts:
+        quotes = await asyncio.gather(
+            *[market_data.get_quote(a.ticker) for a in alerts], return_exceptions=True
+        )
+        for alert, quote in zip(alerts, quotes):
+            if isinstance(quote, Exception):
+                continue
+            price = quote["price"]
+            distance_pct = abs(price - alert.target_price) / alert.target_price * 100
+            triggered = (
+                (alert.condition == "above" and price >= alert.target_price) or
+                (alert.condition == "below" and price <= alert.target_price)
+            )
+            if triggered:
+                alert_lines.append(f"- {alert.ticker} alert TRIGGERED: price ${price:.2f} is {alert.condition} ${alert.target_price:.2f}")
+            elif distance_pct <= 2:
+                alert_lines.append(f"- {alert.ticker} alert near threshold: price ${price:.2f}, target ${alert.target_price:.2f} ({alert.condition})")
+
+    prompt = f"""Today's market conditions:
+{index_lines or '(no index data)'}
+
+Top sector movers:
+{sector_lines or '(no sector data)'}
+
+User's portfolio holdings:
+{holdings_lines}
+Total portfolio value: ${total_value:,.2f}
+Overall return since first buy: {'+' if total_pnl_pct >= 0 else ''}{total_pnl_pct:.2f}%
+
+Upcoming earnings (next 7 days) for held tickers:
+{chr(10).join(earnings_lines) or '(none)'}
+
+Price alerts:
+{chr(10).join(alert_lines) or '(none triggered or near threshold)'}
+
+Write a 3-5 sentence daily brief in plain English, in this order:
+1. One sentence market summary.
+2. One sentence on how the user's portfolio is performing relative to the market.
+3. One to two sentences on one specific thing to pay attention to today (an earnings report, catalyst, or volatility). If there are no holdings or earnings, point out a notable market mover instead.
+4. One optional sentence suggesting something concrete (diversification, rebalancing, or setting an alert).
+Do not use markdown, headers, or bullet points — write flowing prose. Do not pad with disclaimers."""
+
+    try:
+        brief = await claude.ask_claude_text(
+            system="You are a sharp, concise financial co-pilot writing a daily portfolio briefing for a retail investor. Be specific and use the real numbers given to you.",
+            prompt=prompt,
+            max_tokens=400,
+        )
+    except Exception as exc:
+        _claude_error_to_http(exc)
+
+    return {"brief": brief, "generated_at": datetime.now(timezone.utc).isoformat()}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 4.2 — Contextual chart analysis
+# ─────────────────────────────────────────────────────────────────────────
+
+class ChartBar(BaseModel):
+    c: float = Field(..., description="close")
+    h: float | None = None
+    l: float | None = None
+    v: float | None = None
+
+
+class ChartAnalysisRequest(BaseModel):
+    ticker: str = Field(..., max_length=10)
+    range: str = Field(..., max_length=5)
+    price: float
+    change_pct: float
+    bars: list[ChartBar] = Field(default_factory=list, max_length=2000)
+    news: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+
+
+@router.post("/chart-analysis")
+async def chart_analysis(body: ChartAnalysisRequest):
+    closes = [b.c for b in body.bars if b.c is not None]
+    highs = [b.h for b in body.bars if b.h is not None] or closes
+    lows = [b.l for b in body.bars if b.l is not None] or closes
+    volumes = [b.v for b in body.bars if b.v is not None]
+
+    period_high = max(highs) if highs else body.price
+    period_low = min(lows) if lows else body.price
+
+    trend = "flat"
+    if len(closes) >= 2:
+        delta_pct = (closes[-1] - closes[0]) / closes[0] * 100 if closes[0] else 0
+        if delta_pct > 2:
+            trend = "uptrend"
+        elif delta_pct < -2:
+            trend = "downtrend"
+
+    volume_note = "no volume data"
+    if len(volumes) >= 5:
+        recent_avg = sum(volumes[-5:]) / 5
+        prior_avg = sum(volumes[:-5]) / len(volumes[:-5]) if len(volumes) > 5 else recent_avg
+        if prior_avg:
+            ratio = recent_avg / prior_avg
+            if ratio > 1.3:
+                volume_note = "recent volume is notably above its prior average"
+            elif ratio < 0.7:
+                volume_note = "recent volume is notably below its prior average"
+            else:
+                volume_note = "volume is in line with its recent average"
+
+    news_lines = "\n".join(f"- {n.get('title', '')}" for n in body.news[:5]) or "(no recent headlines)"
+
+    prompt = f"""Ticker: {body.ticker}
+Current price: ${body.price:.2f} ({'+' if body.change_pct >= 0 else ''}{body.change_pct:.2f}% today)
+Time range shown: {body.range}
+Period high: ${period_high:.2f}
+Period low: ${period_low:.2f}
+Trend over this period: {trend}
+Volume: {volume_note}
+
+Recent headlines:
+{news_lines}
+
+Write a chart analysis for a normal investor (no technical jargon, explain plainly). Cover, in flowing prose (no markdown/headers):
+1. A plain-English reading of the price pattern over this time range.
+2. Approximate support and resistance levels (you can reference the period high/low given).
+3. Whether the stock looks extended, oversold, or neutral right now, and why.
+4. How the recent news headlines (if any) relate to the price action.
+Keep it under 150 words."""
+
+    try:
+        analysis = await claude.ask_claude_text(
+            system="You are a financial co-pilot explaining stock charts in plain English to a non-technical retail investor. Never give direct buy/sell instructions.",
+            prompt=prompt,
+            max_tokens=500,
+        )
+    except Exception as exc:
+        _claude_error_to_http(exc)
+
+    return {
+        "analysis": analysis,
+        "period_high": round(period_high, 2),
+        "period_low": round(period_low, 2),
+        "trend": trend,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "disclaimer": "This is AI-generated analysis, not financial advice.",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 4.3 — AI earnings briefing (cached per ticker + earnings date)
+# ─────────────────────────────────────────────────────────────────────────
+
+class EarningsBriefRequest(BaseModel):
+    ticker: str = Field(..., max_length=10)
+    name: str = Field(..., max_length=200)
+    earnings_date: str = Field(..., max_length=10)
+    time: str = Field(..., max_length=5)
+    eps_estimate: float
+    eps_actual_prev: float
+    beat_history: str = Field(..., max_length=10)
+
+
+@router.post("/earnings-brief")
+async def earnings_brief(
+    body: EarningsBriefRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    cached = (
+        db.query(models.AIEarningsBrief)
+        .filter(
+            models.AIEarningsBrief.ticker == body.ticker.upper(),
+            models.AIEarningsBrief.earnings_date == body.earnings_date,
+        )
+        .first()
+    )
+
+    if cached:
+        brief = json.loads(cached.brief_json)
+        from_cache = True
+    else:
+        prompt = f"""Company: {body.name} ({body.ticker})
+Reports earnings: {body.earnings_date} ({body.time})
+Consensus EPS estimate: ${body.eps_estimate:.2f}
+Last quarter actual EPS: ${body.eps_actual_prev:.2f}
+Historical beat/miss record (last 4 quarters): {body.beat_history}
+
+Write a pre-earnings brief for a retail investor. Respond in pure JSON (no markdown fences):
+{{
+  "analysts_expect": "1-2 sentences on what analysts expect this quarter and why",
+  "key_things_to_watch": "1-2 sentences on what to watch in the report (margins, guidance, etc.)",
+  "historical_behavior": "1 sentence on how the stock has historically moved after earnings, given the beat/miss record"
+}}"""
+        try:
+            text = await claude.ask_claude_text(
+                system="You are a financial co-pilot writing pre-earnings briefs for retail investors. Always respond with pure JSON.",
+                prompt=prompt,
+                max_tokens=500,
+            )
+        except Exception as exc:
+            _claude_error_to_http(exc)
+
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        try:
+            brief = json.loads(text)
+        except json.JSONDecodeError:
+            brief = {"raw": text}
+
+        db.add(models.AIEarningsBrief(
+            ticker=body.ticker.upper(),
+            earnings_date=body.earnings_date,
+            brief_json=json.dumps(brief),
+        ))
+        db.commit()
+        from_cache = False
+
+    # Per-user position note — computed locally (deterministic, not cached/AI).
+    portfolio = _get_or_create_portfolio(current_user, db)
+    held = next((i for i in portfolio.items if i.ticker == body.ticker.upper()), None)
+    position_note = None
+    if held:
+        position_note = (
+            f"You hold {held.shares:g} shares of {body.ticker} (avg cost ${held.avg_buy_price:.2f}). "
+            f"A 5% earnings-driven move would shift this position by roughly "
+            f"${held.shares * held.avg_buy_price * 0.05:,.2f}."
+        )
+
+    return {**brief, "position_note": position_note, "from_cache": from_cache}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 4.4 — App-wide conversational assistant
+# ─────────────────────────────────────────────────────────────────────────
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., pattern=r"^(user|assistant)$")
+    content: str = Field(..., max_length=4000)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., max_length=2000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=40)
+    current_page: str = Field(default="", max_length=100)
+
+
+@router.post("/chat")
+async def chat(
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    holdings = await _user_holdings(current_user, db)
+    holdings_lines = "\n".join(
+        f"- {h['ticker']}: {h['shares']} sh, ${h['value']:,.2f} value, "
+        f"P&L {'+' if h['pnl'] >= 0 else ''}{h['pnl_pct']:.2f}%, beta {h['beta']}"
+        for h in holdings
+    ) or "(no holdings)"
+
+    watchlist = (
+        db.query(models.Watchlist).filter(models.Watchlist.user_id == current_user.id).all()
+    )
+    watchlist_line = ", ".join(w.ticker for w in watchlist) or "(empty)"
+
+    indices = await market_data.get_market_indices()
+    index_lines = "\n".join(
+        f"- {idx['ticker']}: {'+' if idx['change_pct'] >= 0 else ''}{idx['change_pct']:.2f}%"
+        for idx in indices
+    )
+
+    system = f"""You are the in-app financial co-pilot for MarketCap, a portfolio tracking app. Answer the user's question conversationally and concisely. Use their real portfolio data below when relevant. Never give definitive buy/sell instructions — frame things as analysis and education, not advice. If asked about something outside investing/finance, gently redirect.
+
+User's portfolio holdings:
+{holdings_lines}
+
+User's watchlist: {watchlist_line}
+
+Today's market indices:
+{index_lines or '(unavailable)'}
+
+User is currently viewing: {body.current_page or 'unknown page'}"""
+
+    messages = [{"role": m.role, "content": m.content} for m in body.history]
+    messages.append({"role": "user", "content": body.message})
+
+    try:
+        reply = await claude.ask_claude(system, messages, max_tokens=700)
+    except Exception as exc:
+        _claude_error_to_http(exc)
+
+    return {"reply": reply}

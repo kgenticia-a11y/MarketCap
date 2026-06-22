@@ -7,6 +7,7 @@ import { addToPortfolio } from "../api/portfolio";
 import { getNews } from "../api/news";
 import CandlestickChart from "../components/CandlestickChart";
 import NewsCard from "../components/NewsCard";
+import AIChartAnalysisPanel from "../components/AIChartAnalysisPanel";
 import { Star, Plus, SlidersHorizontal, TrendingUp, TrendingDown, Search, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx } from "clsx";
@@ -349,7 +350,7 @@ export default function InteractiveChart() {
           </div>
         </div>
 
-        {/* Right panel — News */}
+        {/* Right panel — News + AI */}
         <aside className="w-72 shrink-0 border-l border-border overflow-y-auto bg-sidebar">
           <div className="p-4">
             <h3 className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">{activeTicker} News</h3>
@@ -364,6 +365,14 @@ export default function InteractiveChart() {
               )}
             </div>
           </div>
+          <AIChartAnalysisPanel
+            ticker={activeTicker}
+            range={range}
+            price={price}
+            changePct={changePct}
+            bars={bars as never}
+            news={newsItems as { title: string }[]}
+          />
         </aside>
       </div>
 

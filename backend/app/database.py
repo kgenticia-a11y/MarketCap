@@ -44,6 +44,33 @@ class Base(DeclarativeBase):
     pass
 
 
+def run_lightweight_migrations() -> None:
+    """Apply additive column migrations that `create_all` won't perform on
+    existing tables. Idempotent — safe to run on every boot.
+
+    SQLAlchemy's `create_all` only CREATEs missing tables; it never ALTERs
+    existing ones. For dev (SQLite) and small prod (Postgres) we apply a
+    handful of `ADD COLUMN` statements here so new columns reach existing
+    deployments without a full migration framework.
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+
+    # Multi-account aggregation: account_id + account_name on portfolio_items.
+    if inspector.has_table("portfolio_items"):
+        cols = {c["name"] for c in inspector.get_columns("portfolio_items")}
+        statements = []
+        if "account_id" not in cols:
+            statements.append("ALTER TABLE portfolio_items ADD COLUMN account_id INTEGER")
+        if "account_name" not in cols:
+            statements.append("ALTER TABLE portfolio_items ADD COLUMN account_name VARCHAR")
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    logger.info("[migration] %s", stmt)
+                    conn.execute(text(stmt))
+
+
 def get_db():
     """Yield a DB session and ensure rollback on any unhandled exception."""
     db = SessionLocal()

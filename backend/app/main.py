@@ -10,9 +10,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin, screener
+from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin, screener, paper_trading, accounts, ai
 from app.services import market_data
 from app.services.auto_fixer import run_auto_fixer
 
@@ -44,6 +44,7 @@ async def _ensure_schema(max_attempts: int = 5) -> bool:
     for attempt in range(1, max_attempts + 1):
         try:
             await asyncio.to_thread(Base.metadata.create_all, bind=engine)
+            await asyncio.to_thread(run_lightweight_migrations)
             _schema_ready = True
             logger.info("Database schema ready (attempt %d).", attempt)
             return True
@@ -243,6 +244,9 @@ app.include_router(feedback.router)
 app.include_router(alerts.router)
 app.include_router(admin.router)
 app.include_router(screener.router)
+app.include_router(paper_trading.router)
+app.include_router(accounts.router)
+app.include_router(ai.router)
 
 
 

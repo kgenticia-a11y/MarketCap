@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TickerBar from "./TickerBar";
+import AIChatWidget from "./AIChatWidget";
 
 interface Props {
   title: string;
@@ -25,6 +26,7 @@ export default function Layout({ title, children, fullHeight }: Props) {
           </div>
         </main>
       </div>
+      <AIChatWidget />
     </div>
   );
 }

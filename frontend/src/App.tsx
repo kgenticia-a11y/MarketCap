@@ -18,6 +18,7 @@ import Settings from "./pages/Settings";
 import MutualFunds from "./pages/MutualFunds";
 import FeedbackPage from "./pages/Feedback";
 import Screener from "./pages/Screener";
+import PaperTrading from "./pages/PaperTrading";
 import Alerts from "./pages/Alerts";
 import Terms from "./pages/Terms";
 
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/news"     element={<Private title="News"><NewsPage /></Private>} />
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
+      <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
       <Route path="/alerts"   element={<Private title="Alerts"><Alerts /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}

@@ -52,6 +52,25 @@ class User(Base):
     saved_screens = relationship("SavedScreen", cascade="all, delete")
 
 
+class UserAccount(Base):
+    """A user-defined brokerage/retirement/crypto account label.
+
+    Used to tag portfolio items so Holdings can be filtered or aggregated
+    across multiple real-world accounts (Robinhood, Fidelity, Roth IRA, etc.).
+    """
+    __tablename__ = "user_accounts"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name       = Column(String, nullable=False)
+    # Free-form but the API restricts to: brokerage | retirement | crypto | other
+    type       = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User")
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+
 class Portfolio(Base):
     __tablename__ = "portfolios"
 
@@ -74,10 +93,18 @@ class PortfolioItem(Base):
     ticker = Column(String, nullable=False)
     shares = Column(Float, nullable=False)
     avg_buy_price = Column(Float, nullable=False)
+    # Optional account tag for multi-account aggregation. NULL = unassigned
+    # (legacy rows, or single-account users). `account_name` is denormalised
+    # so old rows survive an account rename/delete with a sensible label.
+    account_id   = Column(Integer, ForeignKey("user_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    account_name = Column(String, nullable=True)
     added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     portfolio = relationship("Portfolio", back_populates="items")
-    __table_args__ = (UniqueConstraint("portfolio_id", "ticker"),)
+    account   = relationship("UserAccount")
+    # Uniqueness now keyed on account too — same ticker can exist in
+    # Robinhood and Fidelity as two separate positions.
+    __table_args__ = (UniqueConstraint("portfolio_id", "ticker", "account_id"),)
 
 
 class Watchlist(Base):
@@ -116,6 +143,74 @@ class PortfolioSnapshot(Base):
 
     portfolio = relationship("Portfolio", back_populates="snapshots")
     __table_args__ = (UniqueConstraint("portfolio_id", "date"),)
+
+
+class PaperPortfolio(Base):
+    """A user's virtual paper-trading portfolio.
+
+    Completely separate from the real Portfolio model — paper trades never
+    touch real holdings. One row per user (created on first paper-trading
+    setup); cash_balance reflects available virtual cash after all trades.
+    """
+    __tablename__ = "paper_portfolio"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    starting_cash   = Column(Float, nullable=False)
+    cash_balance    = Column(Float, nullable=False)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User")
+    items   = relationship("PaperPortfolioItem", back_populates="portfolio", cascade="all, delete")
+    trades  = relationship("PaperTrade",         back_populates="portfolio", cascade="all, delete")
+
+
+class PaperPortfolioItem(Base):
+    __tablename__ = "paper_portfolio_items"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("paper_portfolio.id"), nullable=False, index=True)
+    ticker       = Column(String, nullable=False)
+    shares       = Column(Float, nullable=False)
+    avg_buy_price = Column(Float, nullable=False)
+    added_at     = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    portfolio = relationship("PaperPortfolio", back_populates="items")
+    __table_args__ = (UniqueConstraint("portfolio_id", "ticker"),)
+
+
+class PaperTrade(Base):
+    """Append-only log of every executed paper trade."""
+    __tablename__ = "paper_trade_history"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("paper_portfolio.id"), nullable=False, index=True)
+    ticker       = Column(String,  nullable=False)
+    side         = Column(String,  nullable=False)   # "buy" | "sell"
+    shares       = Column(Float,   nullable=False)
+    price        = Column(Float,   nullable=False)
+    total        = Column(Float,   nullable=False)   # signed: positive cash flow into portfolio for sell, negative for buy
+    executed_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    portfolio = relationship("PaperPortfolio", back_populates="trades")
+
+
+class AIEarningsBrief(Base):
+    """Cached Claude-generated pre-earnings brief for a ticker + report date.
+
+    Generic (not user-specific) so it's generated once per ticker/date and
+    served to every user who opens that earnings card — the per-user "your
+    position" note is computed locally at request time, not cached here.
+    """
+    __tablename__ = "ai_earnings_briefs"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    ticker        = Column(String, nullable=False, index=True)
+    earnings_date = Column(String, nullable=False)   # YYYY-MM-DD
+    brief_json    = Column(String, nullable=False)   # JSON-encoded Claude response
+    created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (UniqueConstraint("ticker", "earnings_date"),)
 
 
 class Feedback(Base):
