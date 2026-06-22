@@ -593,17 +593,20 @@ _EXTENDED_UNIVERSE = [
 _EXTENDED_UNIVERSE = _EXTENDED_UNIVERSE[:600]
 
 
-def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40):
+def _download_chunked(tickers: list[str], period: str, chunk_size: int = 40, max_concurrent: int = 5):
     """yf.download's wall-clock time scales with ticker count even with
     threads=True (Yahoo's batch endpoint has practical limits). Splitting
     into chunks and downloading them concurrently cuts total time roughly
-    by a factor of len(chunks)."""
+    by a factor of len(chunks) — but firing every chunk at once trips
+    Yahoo's rate limiter, which silently returns NaN columns instead of
+    erroring (so failures are invisible unless you count them). Capping
+    concurrency keeps the speedup without the silent data loss."""
     import pandas as pd
     chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     if len(chunks) == 1:
         return yf.download(tickers, period=period, interval="1d", auto_adjust=True, progress=False, threads=True)
 
-    with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
         frames = list(pool.map(
             lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
             chunks,
