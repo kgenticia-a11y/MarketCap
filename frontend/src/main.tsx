@@ -1,7 +1,7 @@
 // Apply saved theme + accent colour before first render to avoid a flash
 try {
   const theme = localStorage.getItem("mc_theme");
-  if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+  if (theme !== "dark") document.documentElement.setAttribute("data-theme", "light");
   const saved = localStorage.getItem("mc_accent");
   if (saved) {
     const { base, light } = JSON.parse(saved);
