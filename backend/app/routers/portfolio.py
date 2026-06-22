@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.config import settings
 from app.database import get_db
-from app.services import market_data
+from app.services import market_data, health_score
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,75 @@ async def get_analytics(
         "total_annual_dividend_income":  total_annual_dividend_income,
         "total_monthly_dividend_income": total_monthly_dividend_income,
     }
+
+
+@router.get("/health-score")
+async def get_health_score(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    portfolio = _get_or_create_portfolio(current_user, db)
+    items = portfolio.items
+    if not items:
+        result = health_score.compute_health_score([], 0)
+        return {**result, "history": []}
+
+    item_dicts = [
+        {"ticker": i.ticker, "shares": i.shares, "avg_buy_price": i.avg_buy_price}
+        for i in items
+    ]
+    holdings = await market_data.get_portfolio_analytics(item_dicts)
+    total_value = sum(h["value"] for h in holdings)
+    for h in holdings:
+        h["allocation_pct"] = round(h["value"] / total_value * 100, 2) if total_value > 0 else 0
+
+    result = health_score.compute_health_score(holdings, total_value)
+
+    # Upsert today's row — same TOCTOU-safe pattern as the snapshot upsert above.
+    today = date_type.today().isoformat()
+    row = db.query(models.PortfolioHealthScore).filter_by(
+        portfolio_id=portfolio.id, date=today
+    ).first()
+    sub = result["sub_scores"]
+    if row:
+        row.score = result["score"]
+        row.grade = result["grade"]
+        row.diversification_score = sub["diversification"]["score"]
+        row.volatility_score = sub["volatility"]["score"]
+        row.concentration_score = sub["concentration"]["score"]
+        row.beta_score = sub["beta"]["score"]
+        db.commit()
+    else:
+        try:
+            db.add(models.PortfolioHealthScore(
+                portfolio_id=portfolio.id, date=today,
+                score=result["score"], grade=result["grade"],
+                diversification_score=sub["diversification"]["score"],
+                volatility_score=sub["volatility"]["score"],
+                concentration_score=sub["concentration"]["score"],
+                beta_score=sub["beta"]["score"],
+            ))
+            db.commit()
+        except IntegrityError:
+            db.rollback()  # another concurrent request won the insert race; today's row already exists
+
+    cutoff = (date_type.today() - timedelta(days=30)).isoformat()
+    history_rows = (
+        db.query(models.PortfolioHealthScore)
+        .filter(models.PortfolioHealthScore.portfolio_id == portfolio.id,
+                models.PortfolioHealthScore.date >= cutoff)
+        .order_by(models.PortfolioHealthScore.date)
+        .all()
+    )
+    history = [{"date": r.date, "score": r.score} for r in history_rows]
+    # Make sure today's freshly computed score is reflected even if the row
+    # above lost a commit race — append/replace rather than trusting the read.
+    if history and history[-1]["date"] == today:
+        history[-1]["score"] = result["score"]
+    else:
+        history.append({"date": today, "score": result["score"]})
+
+    return {**result, "history": history}
 
 
 @router.get("", response_model=schemas.PortfolioOut)

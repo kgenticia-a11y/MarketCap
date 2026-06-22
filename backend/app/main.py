@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin
+from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin, screener
 from app.services import market_data
 from app.services.auto_fixer import run_auto_fixer
 
@@ -242,6 +242,7 @@ app.include_router(history.router)
 app.include_router(feedback.router)
 app.include_router(alerts.router)
 app.include_router(admin.router)
+app.include_router(screener.router)
 
 
 

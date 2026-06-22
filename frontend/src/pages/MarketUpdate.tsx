@@ -12,10 +12,11 @@ import {
   Star,
   Briefcase,
   Clock,
+  Landmark,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
-import { getMarketUpdate, getEarningsCalendar } from "../api/stocks";
+import { getMarketUpdate, getEarningsCalendar, getEconomicCalendar } from "../api/stocks";
 import { getWatchlist, addToWatchlist } from "../api/watchlist";
 import { getPortfolio } from "../api/portfolio";
 
@@ -45,6 +46,25 @@ interface EarningsData {
   week_start: string;
   week_end: string;
   days: Record<string, EarningsDay>;
+}
+
+interface EconEvent {
+  name: string;
+  category: string;
+  impact: "High" | "Medium" | "Low";
+  date: string;
+  day: string;
+  time_et: string;
+  country: string;
+  previous: string | null;
+  forecast: string | null;
+  actual: string | null;
+}
+
+interface EconCalendarData {
+  week_start: string;
+  week_end: string;
+  events: EconEvent[];
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -472,10 +492,252 @@ function EarningsTab() {
   );
 }
 
+/* ── Economic Calendar Tab ─────────────────────────────────────────────── */
+
+const ECON_CATEGORIES = ["All", "Fed Events", "Jobs & Labor", "Inflation", "GDP", "Earnings Season Dates", "Other"];
+
+const IMPACT_STYLE: Record<EconEvent["impact"], { emoji: string; cls: string }> = {
+  High:   { emoji: "🔴", cls: "bg-negative/15 text-negative border-negative/30" },
+  Medium: { emoji: "🟡", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
+  Low:    { emoji: "🟢", cls: "bg-positive/15 text-positive border-positive/30" },
+};
+
+function ImpactBadge({ impact }: { impact: EconEvent["impact"] }) {
+  const cfg = IMPACT_STYLE[impact];
+  return (
+    <span className={clsx("text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 whitespace-nowrap", cfg.cls)}>
+      <span>{cfg.emoji}</span>{impact}
+    </span>
+  );
+}
+
+// Generic, category-aware "why this matters to equity investors" blurbs —
+// keyed by event name since each release has a distinct market mechanism.
+const EVENT_EXPLANATIONS: Record<string, (e: EconEvent) => string> = {
+  "Federal Reserve Interest Rate Decision": (e) =>
+    `Sets the economy-wide cost of borrowing. Markets are pricing in ${e.forecast ?? "no change"}. A surprise hike or dovish pivot can swing equities sharply, especially rate-sensitive tech and growth names.`,
+  "FOMC Meeting Minutes": () =>
+    "Investors parse the Fed's internal debate for clues on the pace and timing of future rate moves.",
+  "Nonfarm Payrolls": (e) =>
+    `The Fed's top labor-market signal. Consensus expects ${e.forecast ?? "a moderate gain"}. A hot print can revive rate-hike fears; a weak one can stoke recession worries.`,
+  "Unemployment Rate": () =>
+    "A rising rate alongside payrolls strengthens the case for cuts; a falling rate does the opposite.",
+  "Initial Jobless Claims": () =>
+    "A high-frequency pulse on labor-market health between the monthly jobs reports.",
+  "Consumer Price Index (CPI)": (e) =>
+    `Inflation data directly impacts Fed rate decisions. Markets are pricing in a ${e.forecast ?? "moderate"} increase. A surprise to the upside could push yields higher and pressure tech stocks.`,
+  "Producer Price Index (PPI)": () =>
+    "Wholesale price pressure that often filters into consumer prices a few months later — a leading inflation signal.",
+  "Core PCE Price Index": (e) =>
+    `The Fed's preferred inflation gauge. Consensus sees ${e.forecast ?? "a modest rise"}. Persistently sticky readings keep rate cuts off the table longer.`,
+  "GDP Growth Rate (Advance Estimate)": (e) =>
+    `The first read on growth for the quarter. Consensus expects ${e.forecast ?? "moderate growth"}. A sharp miss raises recession concern; a hot print can revive inflation worries.`,
+  "Retail Sales": () =>
+    "A read on consumer spending strength, which drives roughly two-thirds of U.S. GDP.",
+  "ISM Manufacturing PMI": () =>
+    "A reading below 50 signals factory-sector contraction; above 50 signals expansion.",
+  "Consumer Confidence Index": () =>
+    "Tracks household sentiment about jobs and income — a leading indicator for future spending.",
+  "Big Bank Earnings Season Begins": () =>
+    "Major banks kick off earnings season, often setting the tone for broader market sentiment heading into the reporting cycle.",
+};
+
+function explainEvent(e: EconEvent): string {
+  return EVENT_EXPLANATIONS[e.name]?.(e)
+    ?? "A scheduled economic data release that can move markets on a surprise versus consensus.";
+}
+
+function formatEventDate(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+function EventCard({ event }: { event: EconEvent }) {
+  return (
+    <div className="bg-surface rounded-xl border border-border p-4 flex items-start justify-between gap-4 hover:border-border-hover transition-colors">
+      <div className="flex items-start gap-3 min-w-0">
+        <span className="text-base leading-none mt-0.5" title={event.country}>🇺🇸</span>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white truncate">{event.name}</div>
+          <div className="text-[11px] text-muted mt-0.5">{formatEventDate(event.date)} · {event.time_et}</div>
+          <div className="text-[10px] text-muted/70 mt-0.5">{event.category}</div>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2 shrink-0">
+        <ImpactBadge impact={event.impact} />
+        <div className="flex gap-3 text-[10px] text-right">
+          <div>
+            <div className="text-muted">Prev</div>
+            <div className="text-white font-semibold">{event.previous ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-muted">Fcst</div>
+            <div className="text-white font-semibold">{event.forecast ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-muted">Actual</div>
+            <div className={clsx("font-semibold", event.actual ? "text-accent" : "text-white")}>{event.actual ?? "—"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarketMoversWidget({ events, weekLabel }: { events: EconEvent[]; weekLabel: string }) {
+  const impactRank: Record<EconEvent["impact"], number> = { High: 0, Medium: 1, Low: 2 };
+  const top = [...events].sort((a, b) => impactRank[a.impact] - impactRank[b.impact]).slice(0, 5);
+  if (!top.length) return null;
+  return (
+    <div className="bg-surface rounded-xl border border-border p-5">
+      <h3 className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">
+        {weekLabel}&apos;s Market Movers
+      </h3>
+      <div className="space-y-3.5">
+        {top.map((e) => (
+          <div key={`${e.name}-${e.date}`} className="flex gap-2.5">
+            <span className="text-sm leading-none mt-0.5">{IMPACT_STYLE[e.impact].emoji}</span>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white">
+                {e.name} — {e.day} {e.time_et}
+              </div>
+              <p className="text-xs text-muted mt-0.5 leading-relaxed">{explainEvent(e)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type ImpactFilter = "all" | "high" | "medium+";
+
+function EconomicCalendarTab() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all");
+  const [category, setCategory] = useState("All");
+
+  const { data, isLoading, isError } = useQuery<EconCalendarData>({
+    queryKey: ["economic-calendar", weekOffset],
+    queryFn:  () => getEconomicCalendar(weekOffset),
+    staleTime: 300_000,
+  });
+
+  const events = data?.events ?? [];
+  const filtered = events.filter((e) => {
+    if (impactFilter === "high" && e.impact !== "High") return false;
+    if (impactFilter === "medium+" && e.impact === "Low") return false;
+    if (category !== "All" && e.category !== category) return false;
+    return true;
+  });
+
+  const weekLabel = data
+    ? formatWeekLabel(data.week_start, data.week_end)
+    : "Loading...";
+  const thisWeekLabel = weekOffset === 0 ? "This Week" : weekOffset === 1 ? "Next Week" : weekOffset === -1 ? "Last Week" : `Week ${weekOffset > 0 ? "+" : ""}${weekOffset}`;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-12 bg-surface rounded-xl animate-pulse" />
+        <div className="space-y-2.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 bg-surface rounded-xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted text-sm">
+        Failed to load economic calendar — please try again.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+
+      {/* Week selector */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setWeekOffset((w) => Math.max(-4, w - 1))}
+          className="flex items-center gap-1 text-xs text-muted hover:text-white transition-colors px-3 py-2 rounded-lg bg-surface border border-border hover:border-border-hover"
+        >
+          <ChevronLeft size={14} /> Previous
+        </button>
+        <div className="text-center">
+          <div className="text-sm font-semibold text-white">{thisWeekLabel}</div>
+          <div className="text-[11px] text-muted">{weekLabel}</div>
+        </div>
+        <button
+          onClick={() => setWeekOffset((w) => Math.min(8, w + 1))}
+          className="flex items-center gap-1 text-xs text-muted hover:text-white transition-colors px-3 py-2 rounded-lg bg-surface border border-border hover:border-border-hover"
+        >
+          Next <ChevronRight size={14} />
+        </button>
+      </div>
+
+      {/* Impact + category filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 bg-surface rounded-xl border border-border p-1">
+          {([
+            { key: "all",      label: "All" },
+            { key: "high",     label: "High Only" },
+            { key: "medium+",  label: "Medium+" },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setImpactFilter(key)}
+              className={clsx(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                impactFilter === key ? "bg-accent text-white" : "text-muted hover:text-white"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {ECON_CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={clsx(
+                "text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+                category === c
+                  ? "bg-accent/20 border-accent/50 text-accent"
+                  : "bg-surface border-border text-muted hover:text-white hover:border-border/80"
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Event list */}
+      <div className="space-y-2.5">
+        {filtered.length === 0 ? (
+          <div className="bg-surface rounded-xl border border-border p-10 text-center text-sm text-muted">
+            No matching events this week.
+          </div>
+        ) : (
+          filtered.map((e) => <EventCard key={`${e.name}-${e.date}`} event={e} />)
+        )}
+      </div>
+
+      <MarketMoversWidget events={events} weekLabel={thisWeekLabel} />
+    </div>
+  );
+}
+
 /* ── Main Page ─────────────────────────────────────────────────────────── */
 
 export default function MarketUpdate() {
-  const [tab, setTab] = useState<"overview" | "earnings">("overview");
+  const [tab, setTab] = useState<"overview" | "earnings" | "economic">("overview");
 
   return (
     <div className="p-6 space-y-6">
@@ -483,8 +745,9 @@ export default function MarketUpdate() {
       {/* Tab bar */}
       <div className="flex gap-1 bg-surface rounded-xl border border-border p-1">
         {([
-          { key: "overview", label: "Market Overview", icon: Activity },
-          { key: "earnings", label: "Earnings Calendar", icon: Clock },
+          { key: "overview", label: "Market Overview",   icon: Activity },
+          { key: "earnings", label: "Earnings Calendar",  icon: Clock },
+          { key: "economic", label: "Economic Calendar",  icon: Landmark },
         ] as const).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -501,7 +764,7 @@ export default function MarketUpdate() {
       </div>
 
       {/* Tab content */}
-      {tab === "overview" ? <OverviewTab /> : <EarningsTab />}
+      {tab === "overview" ? <OverviewTab /> : tab === "earnings" ? <EarningsTab /> : <EconomicCalendarTab />}
     </div>
   );
 }

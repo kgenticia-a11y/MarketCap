@@ -14,6 +14,9 @@ export const updatePortfolioItem = (ticker: string, shares: number, avg_buy_pric
 export const getPortfolioAnalytics = () =>
   client.get("/portfolio/analytics").then((r) => r.data);
 
+export const getPortfolioHealthScore = () =>
+  client.get("/portfolio/health-score").then((r) => r.data);
+
 export interface RiskProfile {
   horizon: string;
   tolerance: string;

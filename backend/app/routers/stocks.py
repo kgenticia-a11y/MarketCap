@@ -105,6 +105,16 @@ async def earnings_calendar(week_offset: int = Query(0, ge=-4, le=8)):
         raise HTTPException(502, "Earnings data unavailable.")
 
 
+@router.get("/economic/calendar")
+async def economic_calendar(week_offset: int = Query(0, ge=-4, le=8)):
+    """Return macro events (Fed, jobs, inflation, GDP) for the given week."""
+    try:
+        return await market_data.get_economic_calendar(week_offset)
+    except Exception:
+        logger.exception("economic_calendar failed")
+        raise HTTPException(502, "Economic calendar unavailable.")
+
+
 @router.get("/market/update")
 async def market_update():
     try:

@@ -4,6 +4,36 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+class PortfolioHealthScore(Base):
+    __tablename__ = "portfolio_health_scores"
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    portfolio_id          = Column(Integer, ForeignKey("portfolios.id"), nullable=False, index=True)
+    date                  = Column(String, nullable=False)   # YYYY-MM-DD
+    score                 = Column(Integer, nullable=False)  # 0-100
+    grade                 = Column(String, nullable=False)   # A/B/C/D/F
+    diversification_score = Column(Integer, nullable=False)  # 0-25
+    volatility_score      = Column(Integer, nullable=False)  # 0-25
+    concentration_score   = Column(Integer, nullable=False)  # 0-25
+    beta_score            = Column(Integer, nullable=False)  # 0-25
+    created_at            = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    portfolio = relationship("Portfolio")
+    __table_args__ = (UniqueConstraint("portfolio_id", "date"),)
+
+
+class SavedScreen(Base):
+    __tablename__ = "saved_screens"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name       = Column(String, nullable=False)
+    filters    = Column(String, nullable=False)   # JSON-encoded filter state
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -16,9 +46,10 @@ class User(Base):
     # NULL means they registered before terms were enforced (legacy).
     terms_accepted_at = Column(DateTime, nullable=True)
 
-    portfolios  = relationship("Portfolio",   back_populates="owner", cascade="all, delete")
-    watchlist   = relationship("Watchlist",   back_populates="owner", cascade="all, delete")
-    alerts      = relationship("PriceAlert",  back_populates="owner", cascade="all, delete")
+    portfolios   = relationship("Portfolio",    back_populates="owner", cascade="all, delete")
+    watchlist    = relationship("Watchlist",    back_populates="owner", cascade="all, delete")
+    alerts       = relationship("PriceAlert",   back_populates="owner", cascade="all, delete")
+    saved_screens = relationship("SavedScreen", cascade="all, delete")
 
 
 class Portfolio(Base):
@@ -30,8 +61,9 @@ class Portfolio(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="portfolios")
-    items     = relationship("PortfolioItem",     back_populates="portfolio", cascade="all, delete")
-    snapshots = relationship("PortfolioSnapshot", back_populates="portfolio", cascade="all, delete")
+    items        = relationship("PortfolioItem",        back_populates="portfolio", cascade="all, delete")
+    snapshots    = relationship("PortfolioSnapshot",    back_populates="portfolio", cascade="all, delete")
+    health_scores = relationship("PortfolioHealthScore", cascade="all, delete")
 
 
 class PortfolioItem(Base):

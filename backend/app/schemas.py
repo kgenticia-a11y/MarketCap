@@ -94,6 +94,22 @@ class WatchlistItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# --- Saved Screens ---
+
+class SavedScreenCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    filters: dict = Field(..., description="Arbitrary screener filter state, stored as JSON")
+
+
+class SavedScreenOut(BaseModel):
+    id: int
+    name: str
+    filters: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # --- Price Alerts ---
 
 class PriceAlertCreate(BaseModel):
