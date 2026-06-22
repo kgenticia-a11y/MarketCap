@@ -234,12 +234,12 @@ _UNIVERSE = [
     "ADI", "LRCX", "KLAC",
     # ── 200 additional tickers ───────────────────────────────────────────
     # Technology
-    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
-    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
-    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
     "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
     # Financials
-    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
     "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
     "PRU", "ALL", "TRV", "CINF", "GL",
     # Healthcare
@@ -252,14 +252,14 @@ _UNIVERSE = [
     # Communication Services
     "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
     # Energy
-    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
     # Industrials
     "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
     "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
     # Consumer Staples
     "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
     # Materials
-    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
     # Real Estate
     "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
     # Utilities
@@ -509,12 +509,12 @@ _EXTENDED_UNIVERSE = [
     "ADI", "LRCX", "KLAC",
     # ── 200 additional tickers ───────────────────────────────────────────
     # Technology
-    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
-    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
-    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
     "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
     # Financials
-    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
     "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
     "PRU", "ALL", "TRV", "CINF", "GL",
     # Healthcare
@@ -527,14 +527,14 @@ _EXTENDED_UNIVERSE = [
     # Communication Services
     "LYV", "MTCH", "IPG", "OMC", "TTWO", "NWSA", "WMG", "FOX", "IMAX", "CHWY",
     # Energy
-    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
     # Industrials
     "TT", "ROK", "DOV", "AME", "PCAR", "CMI", "IR", "PH", "ITW", "SWK",
     "FAST", "ODFL", "CHRW", "XPO", "GNRC", "OTIS", "CARR", "PWR", "EME", "HUBB",
     # Consumer Staples
     "HSY", "SJM", "K", "GIS", "CPB", "HRL", "MKC", "CHD", "CLX", "BG",
     # Materials
-    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
     # Real Estate
     "DLR", "PSA", "WELL", "CBRE", "VICI", "ARE", "MAA", "UDR", "ESS", "INVH",
     # Utilities
@@ -774,15 +774,15 @@ _SCREENER_UNIVERSE = [
     "TXN", "AMAT", "AVGO", "MU", "IBM", "INTU", "NOW", "SNOW", "PLTR", "CRWD",
     "PANW", "NET", "ZS", "FTNT", "DDOG", "TEAM", "MDB", "HPQ", "DELL",
     "SHOP", "XYZ", "ZM", "UBER", "LYFT", "TWLO", "OKTA", "DOCU", "ADI", "LRCX", "KLAC",
-    "WDAY", "HUBS", "VEEV", "ANSS", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
-    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "JNPR", "GDDY", "TTD", "BILL", "PAYC",
-    "SMCI", "ARM", "APP", "MRVL", "PSTG", "MNDY", "CFLT", "PATH", "GRAB", "GLOB",
+    "WDAY", "HUBS", "VEEV", "CDNS", "SNPS", "KEYS", "MPWR", "ON", "MCHP",
+    "NXPI", "SWKS", "AKAM", "FFIV", "ANET", "GDDY", "TTD", "BILL", "PAYC",
+    "SMCI", "ARM", "APP", "MRVL", "MNDY", "PATH", "GRAB", "GLOB",
     "EPAM", "ACN", "IT", "CTSH", "LDOS", "SAIC", "MANH", "TYL", "GEN", "ZBRA",
     # Financials (53)
     "JPM", "GS", "BAC", "WFC", "MS", "V", "MA", "PYPL", "AXP", "BLK",
     "C", "USB", "PNC", "COF", "SCHW", "ICE", "CME", "TFC",
     "SPGI", "MCO", "MSCI", "NDAQ", "TROW", "FISV", "FIS", "ADP", "COIN", "BRK-B",
-    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "CMA", "DFS",
+    "ALLY", "MTB", "KEY", "CFG", "HBAN", "RF", "ZION", "FITB", "DFS",
     "SYF", "MKTX", "CBOE", "RJF", "LPLA", "NTRS", "STT", "BK", "AIG", "MET",
     "PRU", "ALL", "TRV", "CINF", "GL",
     # Healthcare (49)
@@ -807,7 +807,7 @@ _SCREENER_UNIVERSE = [
     "XOM", "CVX", "COP", "SLB", "EOG",
     "OXY", "PSX", "VLO", "MPC", "HAL",
     "DVN", "BKR",
-    "FANG", "CTRA", "APA", "MRO", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
+    "FANG", "APA", "AR", "EQT", "TRGP", "WMB", "KMI", "OKE",
     # Industrials (38)
     "BA", "GE", "CAT", "HON", "UPS", "DE",
     "LMT", "RTX", "NOC", "GD", "MMM", "EMR", "ETN",
@@ -822,7 +822,7 @@ _SCREENER_UNIVERSE = [
     "FCX", "NEM", "LIN",
     "DOW", "DD", "NUE",
     "ALB", "SHW", "PPG", "ECL", "IFF",
-    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP", "WRK",
+    "APD", "CE", "EMN", "RPM", "VMC", "MLM", "BALL", "PKG", "IP",
     # Real Estate (17)
     "AMT", "PLD",
     "SPG", "O", "EQR",
@@ -895,6 +895,18 @@ _screener_lock = threading.Lock()
 _SCREENER_TTL = 1800  # 30 minutes
 
 
+def _volume_level(volume: float | None, avg_volume: float | None) -> str:
+    """Bucket today's volume relative to the stock's own average — a flat
+    threshold would call every small-cap "Low" and every mega-cap "High"."""
+    if not volume or not avg_volume:
+        return "Average"
+    ratio = volume / avg_volume
+    if ratio < 0.5:  return "Low"
+    if ratio < 1.5:  return "Average"
+    if ratio < 3.0:  return "High"
+    return "Very High"
+
+
 def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
     """yf.Ticker(ticker).info, bounded so a single slow ticker can't stall
     the whole screener/funds batch past the time budget."""
@@ -951,6 +963,8 @@ def _fetch_screener() -> list[dict]:
             w52r   = round(raw_52 * 100, 2) if raw_52 is not None else None
             div_rate  = info.get("dividendRate") or 0
             div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
+            volume     = info.get("volume") or info.get("regularMarketVolume")
+            avg_volume = info.get("averageVolume")
             return {
                 "ticker":         ticker,
                 "name":           info.get("longName") or info.get("shortName", ticker),
@@ -964,6 +978,9 @@ def _fetch_screener() -> list[dict]:
                 "market_cap":     mkt_cap,
                 "pe_ratio":       round(pe, 2) if pe is not None else None,
                 "dividend_yield": round(div_yield, 4),
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, avg_volume),
+                "country":        info.get("country") or "United States",
             }
         except Exception:
             return None
@@ -1004,6 +1021,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
         div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
         annual_div_per_share = round(div_rate, 4)
         annual_div_income = round(div_rate * shares, 2)
+        beta = info.get("beta")
         return {
             "ticker":         ticker,
             "name":           info.get("longName") or info.get("shortName", ticker),
@@ -1019,6 +1037,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "dividend_yield": round(div_yield, 4),
             "annual_dividend_per_share": annual_div_per_share,
             "annual_dividend_income":    annual_div_income,
+            "beta":           round(beta, 3) if isinstance(beta, (int, float)) else None,
             "allocation_pct": 0,  # filled by the router after aggregation
         }
     except Exception:
@@ -1030,6 +1049,7 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "cost": round(cost, 2), "value": round(cost, 2),
             "pnl": 0, "pnl_pct": 0, "dividend_yield": 0,
             "annual_dividend_per_share": 0, "annual_dividend_income": 0,
+            "beta": None,
             "allocation_pct": 0,
         }
 
@@ -1130,6 +1150,159 @@ async def get_earnings_calendar(week_offset: int = 0) -> dict:
     return result
 
 
+# ── Economic Calendar ───────────────────────────────────────────────────────
+# No live economic-calendar API is wired up yet (Trading Economics / FMP both
+# require a paid key). This mirrors the existing earnings-calendar approach —
+# a curated template of real, recurring US macro releases placed on the
+# calendar using their actual real-world cadence (NFP = first Friday of the
+# month, jobless claims = every Thursday, etc.) rather than random placement.
+# Swap in a live provider here once a key is available; the response shape
+# is the contract callers depend on.
+
+_ECONOMIC_EVENTS = [
+    {"name": "Federal Reserve Interest Rate Decision", "category": "Fed Events",   "impact": "High",   "weekday": 2, "unit": "%",         "base": 4.25, "vol": 0.0,  "cadence": "fomc"},
+    {"name": "FOMC Meeting Minutes",                    "category": "Fed Events",   "impact": "Medium", "weekday": 2, "unit": "",          "base": 0,    "vol": 0,    "cadence": "fomc_minutes"},
+    {"name": "Nonfarm Payrolls",                        "category": "Jobs & Labor", "impact": "High",   "weekday": 4, "unit": "K",         "base": 180,  "vol": 60,   "cadence": "first_friday"},
+    {"name": "Unemployment Rate",                       "category": "Jobs & Labor", "impact": "High",   "weekday": 4, "unit": "%",         "base": 4.1,  "vol": 0.2,  "cadence": "first_friday"},
+    {"name": "Initial Jobless Claims",                  "category": "Jobs & Labor", "impact": "Medium", "weekday": 3, "unit": "K",         "base": 220,  "vol": 15,   "cadence": "weekly"},
+    {"name": "Consumer Price Index (CPI)",              "category": "Inflation",    "impact": "High",   "weekday": 1, "unit": "% MoM",     "base": 0.3,  "vol": 0.15, "cadence": "mid_month"},
+    {"name": "Producer Price Index (PPI)",              "category": "Inflation",    "impact": "Medium", "weekday": 3, "unit": "% MoM",     "base": 0.2,  "vol": 0.15, "cadence": "mid_month_late"},
+    {"name": "Core PCE Price Index",                    "category": "Inflation",    "impact": "High",   "weekday": 4, "unit": "% MoM",     "base": 0.25, "vol": 0.1,  "cadence": "last_friday"},
+    {"name": "GDP Growth Rate (Advance Estimate)",      "category": "GDP",          "impact": "High",   "weekday": 3, "unit": "% QoQ ann.","base": 2.2,  "vol": 0.7,  "cadence": "gdp_quarter"},
+    {"name": "Retail Sales",                            "category": "Other",        "impact": "Medium", "weekday": 2, "unit": "% MoM",     "base": 0.4,  "vol": 0.3,  "cadence": "mid_month"},
+    {"name": "ISM Manufacturing PMI",                   "category": "Other",        "impact": "Medium", "weekday": 0, "unit": "",          "base": 49.0, "vol": 1.5,  "cadence": "first_friday_week"},
+    {"name": "Consumer Confidence Index",               "category": "Other",        "impact": "Low",    "weekday": 1, "unit": "",          "base": 105,  "vol": 4,    "cadence": "last_week"},
+    {"name": "Big Bank Earnings Season Begins",         "category": "Earnings Season Dates", "impact": "Medium", "weekday": 1, "unit": "", "base": 0, "vol": 0, "cadence": "earnings_season"},
+]
+
+_FOMC_ANCHOR = date(2024, 1, 1)  # arbitrary Monday-aligned reference for the ~6-week FOMC cadence
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, last: bool = False) -> date:
+    import calendar as _cal
+    if last:
+        last_day = _cal.monthrange(year, month)[1]
+        d = date(year, month, last_day)
+        return d - timedelta(days=(d.weekday() - weekday) % 7)
+    d = date(year, month, 1)
+    return d + timedelta(days=(weekday - d.weekday()) % 7)
+
+
+def _week_contains(monday: date, target: date) -> bool:
+    return monday <= target <= monday + timedelta(days=4)
+
+
+def _is_fomc_week(monday: date) -> bool:
+    weeks_since_anchor = (monday - _FOMC_ANCHOR).days // 7
+    return weeks_since_anchor % 6 == 0
+
+
+def _event_date_for_week(ev: dict, monday: date) -> date | None:
+    cadence = ev["cadence"]
+    weekday = ev["weekday"]
+    candidate = monday + timedelta(days=weekday)
+
+    # Use the candidate date's own month, not monday's — a Mon-Fri week can
+    # straddle a month boundary, and "first Friday of the month" must resolve
+    # against whichever month that Friday actually falls in.
+    if cadence == "weekly":
+        return candidate
+    if cadence == "first_friday":
+        target = _nth_weekday_of_month(candidate.year, candidate.month, weekday)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "first_friday_week":
+        # Same week as the month's first Friday, but on this event's own weekday.
+        first_friday = _nth_weekday_of_month(candidate.year, candidate.month, 4)
+        return candidate if _week_contains(monday, first_friday) else None
+    if cadence == "last_friday":
+        target = _nth_weekday_of_month(candidate.year, candidate.month, 4, last=True)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "last_week":
+        last_day_of_month = date(monday.year, monday.month, 1) + timedelta(days=31)
+        last_day_of_month = last_day_of_month.replace(day=1) - timedelta(days=1)
+        return candidate if last_day_of_month - candidate < timedelta(days=7) and candidate.month == monday.month else None
+    if cadence == "mid_month":
+        return candidate if 8 <= candidate.day <= 14 else None
+    if cadence == "mid_month_late":
+        return candidate if 12 <= candidate.day <= 18 else None
+    if cadence == "gdp_quarter":
+        if candidate.month not in (1, 4, 7, 10):
+            return None
+        target = _nth_weekday_of_month(candidate.year, candidate.month, weekday, last=True)
+        return candidate if _week_contains(monday, target) else None
+    if cadence == "fomc":
+        return candidate if _is_fomc_week(monday) else None
+    if cadence == "fomc_minutes":
+        three_weeks_ago = monday - timedelta(weeks=3)
+        return candidate if _is_fomc_week(three_weeks_ago) else None
+    if cadence == "earnings_season":
+        return candidate if candidate.month in (1, 4, 7, 10) and 8 <= candidate.day <= 14 else None
+    return None
+
+
+def _generate_economic_calendar(week_offset: int) -> dict:
+    import hashlib
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
+    friday = monday + timedelta(days=4)
+
+    events = []
+    for ev in _ECONOMIC_EVENTS:
+        event_date = _event_date_for_week(ev, monday)
+        if event_date is None:
+            continue
+
+        h = hashlib.md5(f"{ev['name']}{event_date.isoformat()}".encode()).hexdigest()
+        # Deterministic pseudo-random offset within +/- vol, derived from the hash.
+        frac = (int(h[:8], 16) % 2000 - 1000) / 1000  # -1.0 .. 1.0
+        forecast = round(ev["base"] + frac * ev["vol"], 2) if ev["vol"] else ev["base"]
+        # "Previous" reading is the forecast for the prior occurrence — close
+        # to forecast but not identical, using a different hash slice.
+        frac2 = (int(h[8:16], 16) % 2000 - 1000) / 1000
+        previous = round(ev["base"] + frac2 * ev["vol"], 2) if ev["vol"] else ev["base"]
+        actual = None
+        if event_date <= today:
+            frac3 = (int(h[16:24], 16) % 2000 - 1000) / 1000
+            actual = round(forecast + frac3 * ev["vol"] * 0.5, 2) if ev["vol"] else ev["base"]
+
+        events.append({
+            "name": ev["name"],
+            "category": ev["category"],
+            "impact": ev["impact"],
+            "date": event_date.isoformat(),
+            "day": event_date.strftime("%A"),
+            "time_et": "08:30 ET" if ev["weekday"] != 2 or ev["category"] != "Fed Events" else "14:00 ET",
+            "country": "United States",
+            "previous": f"{previous}{ev['unit']}" if ev["unit"] or previous else None,
+            "forecast": f"{forecast}{ev['unit']}" if ev["unit"] or forecast else None,
+            "actual": f"{actual}{ev['unit']}" if actual is not None else None,
+        })
+
+    events.sort(key=lambda e: (e["date"], {"High": 0, "Medium": 1, "Low": 2}[e["impact"]]))
+
+    return {
+        "week_start": str(monday),
+        "week_end": str(friday),
+        "events": events,
+    }
+
+
+_econ_calendar_cache: dict[int, tuple[dict, float]] = {}
+_ECON_CALENDAR_TTL = 3600  # 1 hour
+
+
+async def get_economic_calendar(week_offset: int = 0) -> dict:
+    now = time.time()
+    if week_offset in _econ_calendar_cache:
+        data, ts = _econ_calendar_cache[week_offset]
+        if now - ts < _ECON_CALENDAR_TTL:
+            return data
+    result = _generate_economic_calendar(week_offset)
+    _econ_calendar_cache[week_offset] = (result, now)
+    return result
+
+
 async def stream_screener():
     """Async generator — yields one stock dict at a time as .info calls finish.
 
@@ -1196,6 +1369,8 @@ async def stream_screener():
             pe    = info.get("trailingPE")
             raw52 = info.get("52WeekChange")
             div_r = info.get("dividendRate") or 0
+            volume     = info.get("volume") or info.get("regularMarketVolume")
+            avg_volume = info.get("averageVolume")
             item  = {
                 "ticker":         ticker,
                 "name":           info.get("longName") or info.get("shortName", ticker),
@@ -1211,6 +1386,9 @@ async def stream_screener():
                 "dividend_yield": round(
                     (div_r / price * 100) if price > 0 and div_r > 0 else 0, 4
                 ),
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, avg_volume),
+                "country":        info.get("country") or "United States",
             }
             loop.call_soon_threadsafe(queue.put_nowait, item)
         except Exception:
