@@ -826,10 +826,10 @@ export default function Screener() {
           </span>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-muted">
-              {loadedCount > 0 && loadedCount < 350
-                ? `${loadedCount} / 350 loaded`
-                : loadedCount >= 350
-                  ? "350 in universe"
+              {loadedCount > 0 && isLoading
+                ? `${loadedCount} / ${loadedCount} loaded`
+                : loadedCount > 0
+                  ? `${loadedCount} in universe`
                   : null}
             </span>
             <div className="flex items-center gap-1 bg-surface-hover rounded-lg p-0.5 border border-border">
