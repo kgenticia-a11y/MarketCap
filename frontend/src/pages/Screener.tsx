@@ -327,6 +327,23 @@ function StockCard({
   );
 }
 
+// Module-level cache so the streamed universe survives navigating to another
+// tab and back. Without it, every mount fired a fresh /stocks/screener stream
+// and the user watched the skeleton reload each time. With it, the first mount
+// pays the full streaming cost, subsequent mounts hydrate instantly from cache,
+// and a periodic timer quietly refreshes prices in the background.
+interface ScreenerCache {
+  rows: ScreenerRow[];
+  ts: number;            // last successful refresh timestamp (ms)
+  refreshingTs: number;  // timestamp of the in-flight refresh (0 = idle)
+}
+const screenerCache: ScreenerCache = { rows: [], ts: 0, refreshingTs: 0 };
+
+// How often the background refresher re-streams the universe to keep prices
+// fresh. 5 minutes matches the backend's _SCREENER_TTL / refresh loop so we
+// land in the warm-cache fast path rather than triggering a cold fetch.
+const SCREENER_REFRESH_MS = 5 * 60 * 1000;
+
 export default function Screener() {
   const qc = useQueryClient();
   const [filters, setFilters]       = useState<FilterState>(DEFAULT_FILTERS);
@@ -419,22 +436,74 @@ export default function Screener() {
   }
 
   // ── Streaming fetch ──────────────────────────────────────────────────────
-  const [data, setData]           = useState<ScreenerRow[]>([]);
-  const [loadedCount, setLoaded]  = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  // The cache (declared at module scope above) lets the streamed universe
+  // survive navigating to another tab and back. First mount in a session
+  // streams the full universe; later mounts hydrate from cache immediately
+  // and quietly refresh prices in the background.
+  const [data, setData]           = useState<ScreenerRow[]>(() => screenerCache.rows);
+  const [loadedCount, setLoaded]  = useState(() => screenerCache.rows.length);
+  const [isLoading, setIsLoading] = useState(() => screenerCache.rows.length === 0);
   const [isError, setIsError]     = useState(false);
   const [retryKey, setRetryKey]   = useState(0);
   const pendingRef                = useRef<ScreenerRow[]>([]);
   const timerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const retry = () => {
+    // Manual retry: wipe both component state and the module cache so the
+    // user gets a guaranteed fresh stream (e.g. after an error).
+    screenerCache.rows = [];
+    screenerCache.ts = 0;
     setData([]); setLoaded(0); setIsLoading(true); setIsError(false);
     pendingRef.current = [];
     setRetryKey(k => k + 1);
   };
 
+  // Refresh the in-memory cache + state without flipping isLoading/isError.
+  // Used by the periodic timer below — silent price update with no skeleton.
+  async function refreshScreenerInBackground() {
+    if (Date.now() - screenerCache.refreshingTs < 15_000) return;  // dedupe
+    screenerCache.refreshingTs = Date.now();
+    try {
+      const res = await fetch(`${API_URL}/stocks/screener`);
+      if (!res.ok || !res.body) return;
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      const buf: ScreenerRow[] = [];
+      let acc = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        const lines = acc.split("\n");
+        acc = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const row = JSON.parse(line) as ScreenerRow;
+            if (!("error" in row)) buf.push(row);
+          } catch { /* skip */ }
+        }
+      }
+      if (buf.length > 0) {
+        screenerCache.rows = buf;
+        screenerCache.ts = Date.now();
+        setData(buf);
+        setLoaded(buf.length);
+      }
+    } catch {
+      // Silent — user keeps the previously cached rows.
+    } finally {
+      screenerCache.refreshingTs = 0;
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
+    // Already have cached rows? Skip the foreground stream — the user sees
+    // their stocks instantly and the background refresher (below) keeps
+    // prices current. This is the fix for "screener reloads every time the
+    // user navigates back to the tab".
+    const hasCache = screenerCache.rows.length > 0;
 
     const flush = () => {
       timerRef.current = null;
@@ -447,45 +516,69 @@ export default function Screener() {
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), 150_000);
 
-    (async () => {
-      try {
-        const res = await fetch(`${API_URL}/stocks/screener`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok || !res.body) throw new Error("stream failed");
-        const reader  = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
+    if (!hasCache || retryKey > 0) {
+      // First mount of the session (or explicit retry) — full foreground stream.
+      (async () => {
+        try {
+          const res = await fetch(`${API_URL}/stocks/screener`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!res.ok || !res.body) throw new Error("stream failed");
+          const reader  = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done || cancelled) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const row = JSON.parse(line) as ScreenerRow;
-              if (!("error" in row)) pendingRef.current.push(row);
-            } catch { /* skip malformed line */ }
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done || cancelled) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const row = JSON.parse(line) as ScreenerRow;
+                if (!("error" in row)) pendingRef.current.push(row);
+              } catch { /* skip malformed line */ }
+            }
+            // Keep rows in `pendingRef` while the stream is still running so
+            // the UI doesn't reveal a half-loaded universe (users used to see
+            // the row count climb 30 → 36 → 41 → … → 599 live).
           }
-          // Show first stocks immediately; batch subsequent ones every 300 ms
-          if (!timerRef.current) {
-            timerRef.current = setTimeout(flush, pendingRef.current.length > 5 ? 0 : 300);
+          // Stream complete — drop the whole accumulated batch at once and
+          // promote it into the module cache so subsequent mounts skip the
+          // stream entirely.
+          if (!cancelled) {
+            flush();
+            setData(prev => {
+              if (prev.length > 0) {
+                screenerCache.rows = prev;
+                screenerCache.ts = Date.now();
+              }
+              return prev;
+            });
+            setIsLoading(false);
           }
-          setIsLoading(false);
+        } catch {
+          if (!cancelled) { setIsError(true); setIsLoading(false); }
         }
-        flush();
-        if (!cancelled) setIsLoading(false);
-      } catch {
-        if (!cancelled) { setIsError(true); setIsLoading(false); }
-      }
-    })();
+      })();
+    }
+
+    // Periodic background refresh — keeps prices fresh while the user stays on
+    // the tab AND while they're elsewhere. Only fires when the document is
+    // visible so we don't burn bandwidth on hidden tabs.
+    const refreshTimer = setInterval(() => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - screenerCache.ts < SCREENER_REFRESH_MS) return;
+      void refreshScreenerInBackground();
+    }, 30_000);
 
     return () => {
       cancelled = true;
       controller.abort();
       clearTimeout(timeoutId);
+      clearInterval(refreshTimer);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
 
