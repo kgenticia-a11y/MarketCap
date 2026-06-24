@@ -17,8 +17,17 @@ class Settings(BaseSettings):
     web_concurrency: int = 1
     # Max request body size (bytes). Default 1 MB — anything larger gets 413.
     max_body_bytes: int = 1_048_576
-    # Thread pool size for blocking yfinance calls.
-    yf_pool_size: int = 16
+    # Thread pool size for blocking yfinance calls. Yahoo silently
+    # rate-limits (NaN columns / fake "delisted" errors) past ~10 concurrent
+    # connections per replica — see INFRASTRUCTURE.md. This was bumped to 16
+    # alongside the 599-stock universe widening, which made every batch
+    # download self-throttle harder, not faster.
+    yf_pool_size: int = 10
+    # Dedicated pool for per-ticker fast_info backfill (the safety net that
+    # recovers tickers Yahoo's batch endpoint silently NaN-ed). Sized so
+    # `yf_pool_size + yf_backfill_size` stays at or under the ~10-connection
+    # ceiling above — backfill exists to mitigate throttle, not deepen it.
+    yf_backfill_size: int = 4
 
     # ── Database pool (Postgres / MySQL only — SQLite ignores) ────────────
     db_pool_size:    int = 10

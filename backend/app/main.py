@@ -136,6 +136,21 @@ async def lifespan(app: FastAPI):
     )
     overview_refresh_task.add_done_callback(_on_task_done)
 
+    # Same pattern for /market/update and /screener: a single background
+    # refresher per process keeps the cache warm so every user request hits
+    # memory, never yfinance. This is what makes the API stay fast as user
+    # traffic grows — without it, every TTL expiry triggered a thundering
+    # herd of 599-ticker batch fetches that deepened Yahoo's throttle.
+    update_refresh_task = asyncio.create_task(
+        market_data.refresh_market_update_loop(), name="market-update-refresh-loop"
+    )
+    update_refresh_task.add_done_callback(_on_task_done)
+
+    screener_refresh_task = asyncio.create_task(
+        market_data.refresh_screener_loop(), name="screener-refresh-loop"
+    )
+    screener_refresh_task.add_done_callback(_on_task_done)
+
     if settings.auto_fixer_enabled:
         logger.info("Auto-fixer ENABLED — running every %d hours.", settings.auto_fixer_interval_hours)
         fix_task = asyncio.create_task(_auto_fix_loop(), name="auto-fix-loop")
@@ -146,7 +161,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────
-    _shutdown_tasks = [overview_refresh_task]
+    _shutdown_tasks = [overview_refresh_task, update_refresh_task, screener_refresh_task]
     if schema_retry_task is not None:
         _shutdown_tasks.append(schema_retry_task)
     for t in _shutdown_tasks:
