@@ -61,6 +61,13 @@ async def evaluate_alerts_once() -> dict:
                 logger.debug("Alert eval: skipping %s — %s", ticker, exc)
                 continue
 
+            # Don't fire on a stale print (previous-session close masquerading
+            # as today's price). Wait for a fresh quote on the next pass —
+            # firing now would mark the alert as triggered without any new
+            # market activity since the user created it.
+            if quote.get("stale"):
+                continue
+
             for alert in alerts:
                 hit = (
                     (alert.condition == "above" and price >= alert.target_price) or

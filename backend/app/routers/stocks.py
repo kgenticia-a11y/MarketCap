@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 import re
 import time
 from datetime import date, timedelta
@@ -208,16 +209,27 @@ async def refresh_overview_loop() -> None:
     logged and retried on the next tick; the loop never dies on a single error.
     """
     logger.info(
-        "Market-overview auto-refresh loop started (every %ds).",
+        "Market-overview auto-refresh loop started (every ~%ds).",
         _OVERVIEW_REFRESH_INTERVAL,
     )
+    # Jitter + backoff mirror market_data._refresh_loop. We don't share that
+    # helper because this loop forces an unconditional fresh fetch (force=True),
+    # whereas the shared helper just calls a getter that respects the TTL.
+    failures = 0
     while True:
-        await asyncio.sleep(_OVERVIEW_REFRESH_INTERVAL)
+        if failures == 0:
+            delay = _OVERVIEW_REFRESH_INTERVAL * (1.0 + random.uniform(-0.15, 0.15))
+        else:
+            delay = min(30.0 * (2 ** (failures - 1)), 600.0)
+            delay *= (1.0 + random.uniform(-0.15, 0.15))
+        await asyncio.sleep(delay)
         try:
             await _refresh_overview(force=True)
+            failures = 0
             logger.debug("market-overview cache auto-refreshed")
         except Exception as exc:
-            logger.warning("periodic overview refresh failed: %s", exc)
+            failures += 1
+            logger.warning("periodic overview refresh failed (#%d): %s", failures, exc)
 
 
 @router.get("/market/overview")
