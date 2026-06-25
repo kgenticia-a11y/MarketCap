@@ -60,3 +60,45 @@ export const executePaperTrade = (params: {
 
 export const listPaperTrades = (limit = 200) =>
   client.get<PaperTrade[]>(`/paper-trading/trades?limit=${limit}`).then((r) => r.data);
+
+export type StrategyKey = "buy_hold" | "dca";
+export type StrategyPeriod = "1y" | "3y" | "5y" | "10y";
+export type StrategyFrequency = "weekly" | "monthly" | "quarterly";
+
+export interface BacktestPoint {
+  date: string;
+  value: number;
+}
+
+export interface BacktestSummary {
+  start_value: number;
+  end_value: number;
+  total_return_pct: number;
+  cagr_pct: number;
+  years: number;
+}
+
+export interface BacktestResult {
+  ticker: string;
+  strategy: StrategyKey;
+  period: StrategyPeriod;
+  frequency: StrategyFrequency | null;
+  summary: BacktestSummary;
+  chart: BacktestPoint[];
+  benchmark: {
+    ticker: string;
+    summary: BacktestSummary;
+    chart: BacktestPoint[];
+  } | null;
+}
+
+export const runBacktest = (params: {
+  ticker: string;
+  strategy: StrategyKey;
+  period: StrategyPeriod;
+  amount: number;
+  frequency?: StrategyFrequency;
+}) =>
+  client
+    .get<BacktestResult>("/paper-trading/strategies/backtest", { params })
+    .then((r) => r.data);

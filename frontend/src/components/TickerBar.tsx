@@ -159,24 +159,29 @@ export default function TickerBar({ title, onMenuClick }: { title: string; onMen
   };
 
   return (
-    <header className="h-14 flex items-center border-b border-border bg-sidebar px-6 gap-6 sticky top-0 z-30">
+    <header className="h-14 flex items-center border-b border-border bg-sidebar px-3 sm:px-6 gap-3 sm:gap-6 sticky top-0 z-30">
       {/* Hamburger — mobile only */}
-      <button onClick={onMenuClick} className="md:hidden shrink-0 p-1.5 rounded-lg text-muted hover:text-white transition-colors mr-1">
+      <button onClick={onMenuClick} className="md:hidden shrink-0 p-1.5 rounded-lg text-muted hover:text-white transition-colors">
         <Menu size={18} />
       </button>
 
-      {/* Page title */}
-      <h1 className="text-sm font-semibold text-white whitespace-nowrap w-36 shrink-0">{title}</h1>
+      {/* Page title — narrower on mobile, full width on desktop. Hidden
+          on the very smallest viewports so the ticker strip gets the
+          room it needs; the page title is also in the document <title>
+          so context isn't lost. */}
+      <h1 className="text-sm font-semibold text-white whitespace-nowrap shrink-0 hidden sm:block sm:w-36 truncate">{title}</h1>
 
       {/* Ticker strip */}
-      <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar">
+      <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar min-w-0">
         {(overview?.indices ?? []).map((snap: Record<string, unknown>) => (
           <TickerCard key={snap.ticker as string} snap={snap} />
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative shrink-0">
+      {/* Search — desktop only. On phones the address-bar real estate
+          isn't worth a 192px-wide search box that pushes everything
+          else off-screen; users can navigate to /screener for search. */}
+      <div className="relative shrink-0 hidden md:block">
         <div className="flex items-center bg-surface rounded-lg px-3 py-2 gap-2 w-48">
           <Search size={14} className="text-muted shrink-0" />
           <input

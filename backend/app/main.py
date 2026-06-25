@@ -14,7 +14,9 @@ from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
 from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin, screener, paper_trading, accounts, ai
 from app.services import market_data
+from app.services.alert_evaluator import alert_evaluation_loop
 from app.services.auto_fixer import run_auto_fixer
+from app.services.snapshot_scheduler import snapshot_scheduler_loop
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -151,6 +153,20 @@ async def lifespan(app: FastAPI):
     )
     screener_refresh_task.add_done_callback(_on_task_done)
 
+    # Server-side price-alert evaluation. Without this, alerts persist in the
+    # DB but `triggered_at` is never set — the badge / daily brief never light
+    # up. Runs on its own short-lived DB sessions so a slow evaluation cycle
+    # can't block user requests.
+    alerts_task = asyncio.create_task(alert_evaluation_loop(), name="alert-evaluation-loop")
+    alerts_task.add_done_callback(_on_task_done)
+
+    # Hourly portfolio snapshot scheduler — fills history rows for users who
+    # haven't opened the app today. Without this, the history chart has gaps
+    # for inactive users (the analytics endpoint only writes a row on demand).
+    snapshot_task = asyncio.create_task(snapshot_scheduler_loop(), name="snapshot-scheduler-loop")
+    snapshot_task.add_done_callback(_on_task_done)
+
+    fix_task: asyncio.Task | None = None
     if settings.auto_fixer_enabled:
         logger.info("Auto-fixer ENABLED — running every %d hours.", settings.auto_fixer_interval_hours)
         fix_task = asyncio.create_task(_auto_fix_loop(), name="auto-fix-loop")
@@ -161,16 +177,41 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────
-    _shutdown_tasks = [overview_refresh_task, update_refresh_task, screener_refresh_task]
+    # Cancel every long-lived background task we started. Without this,
+    # uvicorn prints "Task was destroyed but it is pending" warnings on
+    # shutdown and the asyncio loop may close while a refresh loop is mid-
+    # tick (e.g., holding a DB session or partial Yahoo response).
+    _shutdown_tasks: list[asyncio.Task] = [
+        overview_refresh_task,
+        update_refresh_task,
+        screener_refresh_task,
+        alerts_task,
+        snapshot_task,
+        warm_task,
+        overview_task,
+    ]
     if schema_retry_task is not None:
         _shutdown_tasks.append(schema_retry_task)
+    if fix_task is not None:
+        _shutdown_tasks.append(fix_task)
     for t in _shutdown_tasks:
         t.cancel()
     for t in _shutdown_tasks:
         try:
             await t
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, Exception):
+            # Swallow Exception too: a task could raise on cancel cleanup
+            # (e.g., the DB went away mid-tick) and we don't want one bad
+            # task to skip the rest of the teardown.
             pass
+
+    # Release the yfinance thread pools so the process can exit cleanly.
+    # `wait=False` is intentional — at shutdown the orchestrator already
+    # SIGTERM'd us; waiting for hung Yahoo connections would block the exit
+    # past the grace period and trigger a SIGKILL anyway.
+    market_data._pool.shutdown(wait=False)
+    market_data._backfill_pool.shutdown(wait=False)
+
     logger.info("MarketCap API shutting down")
 
 

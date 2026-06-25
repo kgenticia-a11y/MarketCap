@@ -48,14 +48,26 @@ export default function AIChatWidget() {
     <>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-accent hover:bg-accent/90 shadow-lg shadow-accent/30 flex items-center justify-center text-white transition-all"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-12 h-12 rounded-full bg-accent hover:bg-accent/90 shadow-lg shadow-accent/30 flex items-center justify-center text-white transition-all"
         aria-label="Open AI assistant"
       >
         {open ? <X size={20} /> : <Sparkles size={20} />}
       </button>
 
+      {/* Panel sizing:
+          - phones (<sm): pinned to all four edges with safe insets so the
+            sheet always fits the viewport regardless of the keyboard or
+            address bar. No fixed width that could push the close button
+            off-screen.
+          - sm and up: floats above the FAB with a fixed comfortable
+            width, the original desktop behaviour.
+          The height also drops the fixed 560px on mobile — on a 640px
+          phone with a keyboard open that overflows. dvh + max-h keeps
+          the input visible. */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[400px] max-h-[70vh] h-[560px] bg-surface-raised border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed z-50 bg-surface-raised border border-border shadow-2xl flex flex-col overflow-hidden
+                        inset-x-3 bottom-20 top-16 rounded-2xl
+                        sm:inset-x-auto sm:top-auto sm:bottom-24 sm:right-6 sm:w-[400px] sm:h-[560px] sm:max-h-[70vh]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
             <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
               <Sparkles size={14} className="text-accent-light" />

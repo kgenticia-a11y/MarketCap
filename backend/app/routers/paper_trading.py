@@ -1,12 +1,13 @@
 import logging
+import re
 from datetime import date as date_type
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas, auth
 from app.database import get_db
-from app.services import market_data
+from app.services import market_data, backtest as backtest_svc
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,41 @@ async def trade(
     db.commit()
     db.refresh(trade_row)
     return trade_row
+
+
+# Same ticker grammar enforced everywhere else (1-6 chars, A-Z plus . / -).
+# Keeps query-string injection and silly inputs from reaching yfinance.
+_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,5}$")
+
+
+@router.get("/strategies/backtest")
+async def strategies_backtest(
+    ticker: str = Query(..., min_length=1, max_length=6),
+    strategy: str = Query("buy_hold", pattern="^(buy_hold|dca)$"),
+    period: str = Query("5y", pattern="^(1y|3y|5y|10y)$"),
+    amount: float = Query(10000, gt=0, le=1_000_000),
+    frequency: str = Query("monthly", pattern="^(weekly|monthly|quarterly)$"),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Historical backtest of a single strategy against a single ticker
+    over a fixed window. Returns ending value, total return, CAGR, the
+    equity curve, and a SPY buy-and-hold benchmark for comparison.
+
+    Auth is required even though the endpoint is read-only — yfinance
+    calls cost real upstream budget and we already rate-limit by user."""
+    upper = ticker.upper().strip()
+    if not _TICKER_RE.match(upper):
+        raise HTTPException(422, "Invalid ticker symbol.")
+    try:
+        return await backtest_svc.run_backtest(
+            ticker=upper,
+            strategy=strategy,  # type: ignore[arg-type]
+            period=period,      # type: ignore[arg-type]
+            amount=amount,
+            frequency=frequency,  # type: ignore[arg-type]
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.get("/trades", response_model=list[schemas.PaperTradeOut])

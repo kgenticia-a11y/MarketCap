@@ -6,12 +6,14 @@ import { toast } from "sonner";
 import {
   FlaskConical, AlertTriangle, TrendingUp, TrendingDown, DollarSign,
   Wallet, X, ArrowUpRight, ArrowDownRight, RefreshCw, History as HistoryIcon, BarChart3,
+  LineChart as LineChartIcon, Sparkles,
 } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from "recharts";
 import {
   getPaperState, setupPaperTrading, getPaperAnalytics,
-  executePaperTrade, listPaperTrades, resetPaperTrading,
+  executePaperTrade, listPaperTrades, resetPaperTrading, runBacktest,
   type PaperAnalytics, type PaperHolding, type PaperTrade,
+  type StrategyKey, type StrategyPeriod, type StrategyFrequency, type BacktestResult,
 } from "../api/paperTrading";
 import { getPortfolioAnalytics } from "../api/portfolio";
 import { getQuote, searchStocks } from "../api/stocks";
@@ -500,7 +502,7 @@ function HistoryPanel() {
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function PaperTrading() {
-  const [tab, setTab] = useState<"dashboard" | "history">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "strategies" | "history">("dashboard");
   const [showSetup, setShowSetup] = useState(false);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [tradeInitial, setTradeInitial] = useState<{ ticker?: string; side?: "buy" | "sell" }>({});
@@ -597,11 +599,11 @@ export default function PaperTrading() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
-          {(["dashboard", "history"] as const).map(v => (
+          {(["dashboard", "strategies", "history"] as const).map(v => (
             <button key={v} onClick={() => setTab(v)}
               className={clsx("px-3 py-1.5 rounded-md text-xs font-semibold transition-colors capitalize",
                 tab === v ? "bg-accent/20 text-white" : "text-muted hover:text-white")}>
-              {v === "dashboard" ? "Dashboard" : "Trade History"}
+              {v === "dashboard" ? "Dashboard" : v === "strategies" ? "Strategies" : "Trade History"}
             </button>
           ))}
         </div>
@@ -714,6 +716,8 @@ export default function PaperTrading() {
         </>
       )}
 
+      {tab === "strategies" && <StrategiesPanel />}
+
       {tab === "history" && <HistoryPanel />}
 
       {tradeOpen && a && (
@@ -727,6 +731,294 @@ export default function PaperTrading() {
         />
       )}
       {showSetup && <SetupModal onClose={() => setShowSetup(false)} onCreated={() => setShowSetup(false)} />}
+    </div>
+  );
+}
+
+/* ── Strategies panel ────────────────────────────────────────────────────── */
+
+const STRATEGY_OPTIONS: { key: StrategyKey; label: string; desc: string }[] = [
+  {
+    key: "buy_hold",
+    label: "Buy & Hold",
+    desc: "Invest the full amount on day one and hold to the end of the period.",
+  },
+  {
+    key: "dca",
+    label: "Dollar-Cost Average",
+    desc: "Spread the amount evenly across the period — buy a little at each interval.",
+  },
+];
+
+const PERIOD_OPTIONS: { key: StrategyPeriod; label: string }[] = [
+  { key: "1y", label: "1Y" }, { key: "3y", label: "3Y" },
+  { key: "5y", label: "5Y" }, { key: "10y", label: "10Y" },
+];
+
+const FREQUENCY_OPTIONS: { key: StrategyFrequency; label: string }[] = [
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
+  { key: "quarterly", label: "Quarterly" },
+];
+
+function StrategiesPanel() {
+  const [strategy, setStrategy] = useState<StrategyKey>("buy_hold");
+  const [ticker, setTicker] = useState("AAPL");
+  const [period, setPeriod] = useState<StrategyPeriod>("5y");
+  const [amount, setAmount] = useState("10000");
+  const [frequency, setFrequency] = useState<StrategyFrequency>("monthly");
+  const [result, setResult] = useState<BacktestResult | null>(null);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      runBacktest({
+        ticker: ticker.trim().toUpperCase(),
+        strategy,
+        period,
+        amount: Number(amount),
+        frequency: strategy === "dca" ? frequency : undefined,
+      }),
+    onSuccess: setResult,
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        "Backtest failed. Try a different ticker or period.";
+      toast.error(msg);
+    },
+  });
+
+  const amountNum = Number(amount);
+  const canRun = ticker.trim().length > 0 && amountNum > 0 && amountNum <= 1_000_000 && !mut.isPending;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[320px,1fr] gap-4">
+      {/* ── Form ─────────────────────────────────────────────────────── */}
+      <div className="bg-surface rounded-xl border border-border p-4 space-y-4 h-fit">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-accent" />
+          <h3 className="text-xs font-semibold text-white uppercase tracking-widest">Strategy</h3>
+        </div>
+
+        <div className="space-y-2">
+          {STRATEGY_OPTIONS.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setStrategy(s.key)}
+              className={clsx(
+                "w-full text-left rounded-lg border px-3 py-2.5 transition-colors",
+                strategy === s.key
+                  ? "bg-accent/10 border-accent/50"
+                  : "bg-surface-hover border-border hover:border-border/80",
+              )}
+            >
+              <div className={clsx("text-sm font-semibold", strategy === s.key ? "text-accent" : "text-white")}>
+                {s.label}
+              </div>
+              <div className="text-[11px] text-muted mt-0.5 leading-snug">{s.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">
+            Ticker
+          </label>
+          <input
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value.toUpperCase().slice(0, 6))}
+            placeholder="AAPL"
+            className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent/60"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">
+            Amount ($)
+          </label>
+          <input
+            type="number"
+            value={amount}
+            min={1}
+            max={1_000_000}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent/60"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">
+            Period
+          </label>
+          <div className="flex gap-1.5">
+            {PERIOD_OPTIONS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                className={clsx(
+                  "flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border transition-colors",
+                  period === p.key
+                    ? "bg-accent/20 border-accent/50 text-accent"
+                    : "bg-surface-hover border-border text-muted hover:text-white",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {strategy === "dca" && (
+          <div>
+            <label className="block text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">
+              Frequency
+            </label>
+            <div className="flex gap-1.5">
+              {FREQUENCY_OPTIONS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFrequency(f.key)}
+                  className={clsx(
+                    "flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border transition-colors",
+                    frequency === f.key
+                      ? "bg-accent/20 border-accent/50 text-accent"
+                      : "bg-surface-hover border-border text-muted hover:text-white",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => mut.mutate()}
+          disabled={!canRun}
+          className="w-full bg-accent hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
+        >
+          {mut.isPending ? "Running…" : "Run backtest"}
+        </button>
+
+        <p className="text-[11px] text-muted leading-snug">
+          Backtests are historical only. Past returns don't predict future performance.
+        </p>
+      </div>
+
+      {/* ── Result ───────────────────────────────────────────────────── */}
+      <div className="bg-surface rounded-xl border border-border p-4 min-h-[400px]">
+        {!result && !mut.isPending && (
+          <div className="h-full flex flex-col items-center justify-center text-center py-12">
+            <LineChartIcon size={28} className="text-muted/60 mb-3" />
+            <p className="text-sm text-muted">Pick a strategy and run a backtest to see results.</p>
+          </div>
+        )}
+
+        {mut.isPending && (
+          <div className="h-full flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {result && !mut.isPending && <BacktestResultCard result={result} />}
+      </div>
+    </div>
+  );
+}
+
+function BacktestResultCard({ result }: { result: BacktestResult }) {
+  const { summary, benchmark, chart, ticker, strategy, period, frequency } = result;
+  const positive = summary.total_return_pct >= 0;
+  const beatBench = benchmark ? summary.end_value > benchmark.summary.end_value : null;
+
+  const merged = useMemo<Array<{ date: string; value: number | null; bench: number | null }>>(() => {
+    const map = new Map<string, { date: string; value: number | null; bench: number | null }>();
+    for (const p of chart) map.set(p.date, { date: p.date, value: p.value, bench: null });
+    if (benchmark) {
+      for (const p of benchmark.chart) {
+        const row = map.get(p.date) ?? { date: p.date, value: null, bench: null };
+        row.bench = p.value;
+        map.set(p.date, row);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [chart, benchmark]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <div>
+          <div className="text-xs text-muted uppercase tracking-widest font-semibold">
+            {ticker} · {strategy === "buy_hold" ? "Buy & Hold" : `DCA (${frequency})`} · {period.toUpperCase()}
+          </div>
+          <div className="flex items-baseline gap-3 mt-1">
+            <span className="text-2xl font-bold text-white tabular-nums">
+              ${summary.end_value.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            </span>
+            <span className={clsx("text-sm font-semibold", positive ? "text-positive" : "text-negative")}>
+              {positive ? "+" : ""}{summary.total_return_pct.toFixed(2)}%
+            </span>
+            <span className="text-xs text-muted">CAGR {summary.cagr_pct.toFixed(2)}%</span>
+          </div>
+        </div>
+        {benchmark && (
+          <div className={clsx(
+            "text-xs font-semibold px-2.5 py-1.5 rounded-lg border",
+            beatBench
+              ? "border-positive/40 bg-positive/10 text-positive"
+              : "border-negative/40 bg-negative/10 text-negative",
+          )}>
+            {beatBench ? "Beat" : "Underperformed"} SPY by {Math.abs(summary.total_return_pct - benchmark.summary.total_return_pct).toFixed(2)}%
+          </div>
+        )}
+      </div>
+
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={merged} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: "#6b7280" }}
+              tickFormatter={(d) => d.slice(0, 7)}
+              minTickGap={48}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "#6b7280" }}
+              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
+              domain={["auto", "auto"]}
+            />
+            <Tooltip
+              contentStyle={{ background: "#0b1018", border: "1px solid #1f2937", borderRadius: 8, fontSize: 11 }}
+              formatter={(v) => `$${Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Line type="monotone" dataKey="value" name={`${ticker} (${strategy === "buy_hold" ? "B&H" : "DCA"})`}
+              stroke="#7c5cfc" strokeWidth={2} dot={false} isAnimationActive={false} />
+            {benchmark && (
+              <Line type="monotone" dataKey="bench" name="SPY (B&H)"
+                stroke="#06b6d4" strokeWidth={2} dot={false} strokeDasharray="4 4" isAnimationActive={false} />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        <Stat label="Invested" value={`$${summary.start_value.toLocaleString()}`} />
+        <Stat label="Ending value" value={`$${summary.end_value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`} positive={positive} />
+        <Stat label="Total return" value={`${positive ? "+" : ""}${summary.total_return_pct.toFixed(2)}%`} positive={positive} />
+        <Stat label="CAGR" value={`${summary.cagr_pct.toFixed(2)}%`} positive={summary.cagr_pct >= 0} />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+  return (
+    <div className="bg-surface-hover border border-border rounded-lg px-3 py-2">
+      <div className="text-[10px] text-muted uppercase tracking-widest font-semibold">{label}</div>
+      <div className={clsx("text-sm font-semibold tabular-nums mt-0.5",
+        positive === undefined ? "text-white" : positive ? "text-positive" : "text-negative")}>
+        {value}
+      </div>
     </div>
   );
 }
