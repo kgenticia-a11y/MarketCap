@@ -110,7 +110,7 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         # Anonymous feedback — stricter window to deter spam.
         ("POST",  "/feedback",            5, 300, False),
         # ── Market-data endpoints (unauthenticated) ──────────────────────
-        # Screener is by far the most expensive: bulk-downloads 180 tickers.
+        # Screener is by far the most expensive: bulk-downloads the full 599-stock universe.
         ("GET",   "/stocks/screener",     2,  60, False),
         # Market overview + update are also yfinance-heavy.
         ("GET",   "/stocks/market/",      5,  60, True),
@@ -118,7 +118,16 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         ("GET",   "/stocks/",            30,  60, True),
         # News feed.
         ("GET",   "/news",               20,  60, False),
+        # Backtest hits yfinance history every call — 1-3s upstream per
+        # request. Keep it bounded so a hot-clicking user can't melt the
+        # event loop or Yahoo's per-IP budget.
+        ("GET",   "/paper-trading/strategies/backtest",  6, 60, True),
     )
+
+    # Periodic GC: after this many dispatch calls, sweep the whole map and
+    # drop any keys whose deque is empty (window fully expired). Done in-line
+    # instead of on a timer so the cost is amortised across real traffic.
+    _GC_EVERY = 1000
 
     def __init__(
         self,
@@ -128,6 +137,7 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         super().__init__(app)
         self.rules = rules or self.DEFAULT_RULES
         self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        self._calls_since_gc = 0
 
     def _client_ip(self, request: Request) -> str:
         # Fly.io injects Fly-Client-IP with the real client IP; it cannot be

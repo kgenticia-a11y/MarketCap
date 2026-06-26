@@ -15,6 +15,7 @@ import {
   ScanSearch,
   Bell,
   FlaskConical,
+  Star,
   Moon,
   Sun,
   X,
@@ -25,25 +26,34 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { clsx } from "clsx";
 
+// Primary nav: the six daily-driver flows. Anything used rarely or only
+// from a specific drill-down belongs in `tools` or `more` below so it
+// doesn't compete with these for attention.
 const menu = [
-  { label: "Dashboard",         icon: LayoutDashboard,  to: "/" },
-  { label: "Market Update",     icon: TrendingUp,        to: "/market" },
-  { label: "Stock Screener",    icon: ScanSearch,        to: "/screener" },
-  { label: "Paper Trading",     icon: FlaskConical,      to: "/paper-trading" },
-  { label: "Income Estimator",  icon: BarChart2,         to: "/income" },
-  { label: "Alerts",            icon: Bell,              to: "/alerts" },
-  { label: "Interactive Chart", icon: CandlestickChart,  to: "/chart" },
-  { label: "Mutual Funds",      icon: PieChart,          to: "/funds" },
+  { label: "Dashboard",      icon: LayoutDashboard, to: "/" },
+  { label: "Market Update",  icon: TrendingUp,      to: "/market" },
+  { label: "Stock Screener", icon: ScanSearch,      to: "/screener" },
+  { label: "Portfolio",      icon: Briefcase,       to: "/portfolio" },
+  { label: "Watchlist",      icon: Star,            to: "/watchlist" },
+  { label: "Alerts",         icon: Bell,            to: "/alerts" },
+];
+
+// Tools: separate, deeper workflows. Grouping them under their own header
+// keeps the primary nav scannable and signals "these are auxiliary".
+const tools = [
+  { label: "Paper Trading",    icon: FlaskConical,     to: "/paper-trading" },
+  { label: "Income Estimator", icon: BarChart2,        to: "/income" },
+  { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },
+  { label: "Mutual Funds",     icon: PieChart,         to: "/funds" },
 ];
 
 const account = [
-  { label: "Portfolio", icon: Briefcase, to: "/portfolio" },
-  { label: "Settings",  icon: Settings,  to: "/settings",  dot: true },
-  { label: "History",   icon: History,   to: "/history" },
+  { label: "Settings", icon: Settings, to: "/settings" },
+  { label: "History",  icon: History,  to: "/history" },
 ];
 
 const more = [
-  { label: "News",     icon: Newspaper,     to: "/news",     badge: "NEW" },
+  { label: "News",     icon: Newspaper,     to: "/news" },
   { label: "Feedback", icon: MessageSquare, to: "/feedback" },
 ];
 
@@ -149,6 +159,17 @@ export default function Sidebar({ mobileOpen, onClose, collapsed = false, onTogg
             )}
             <div className="space-y-0.5">
               {menu.map((item) => (
+                <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={onClose} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            {!isCollapsed && (
+              <p className="text-[10px] font-semibold text-muted uppercase tracking-widest px-3 mb-2">Tools</p>
+            )}
+            <div className="space-y-0.5">
+              {tools.map((item) => (
                 <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={onClose} />
               ))}
             </div>

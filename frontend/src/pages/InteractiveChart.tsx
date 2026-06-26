@@ -8,7 +8,7 @@ import { getNews } from "../api/news";
 import CandlestickChart from "../components/CandlestickChart";
 import NewsCard from "../components/NewsCard";
 import AIChartAnalysisPanel from "../components/AIChartAnalysisPanel";
-import { Star, Plus, SlidersHorizontal, TrendingUp, TrendingDown, Search, X } from "lucide-react";
+import { Star, Plus, TrendingUp, TrendingDown, Search, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx } from "clsx";
 
@@ -298,10 +298,6 @@ export default function InteractiveChart() {
                   </button>
                 </>
               )}
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted hover:text-white transition-all">
-                <SlidersHorizontal size={13} />
-                Filters
-              </button>
             </div>
           </div>
 
