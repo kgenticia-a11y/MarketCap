@@ -19,6 +19,7 @@ import httpx
 import yfinance as yf
 
 from app.config import settings
+from app.services.nyse_universe import NYSE_EXPANSION
 
 logger = logging.getLogger(__name__)
 
@@ -445,10 +446,12 @@ async def get_market_indices() -> list[dict]:
     return await _run(_fetch_indices)
 
 
-# Canonical 599-stock universe — the single source of truth for breadth,
+# Canonical stock universe — the single source of truth for breadth,
 # gainers/losers, the screener, and every other "all tracked stocks" view.
 # Sectors are evenly represented so the breadth bar and the screener cover
 # the same set; a stock that appears in one always appears in the others.
+# The 599-stock core list below is extended with the 1,500-stock NYSE
+# expansion (nyse_universe.py) for a combined universe of 2,099.
 _UNIVERSE = [
     # Technology (60)
     "AAPL", "MSFT", "NVDA", "AMD", "INTC", "CSCO", "ORCL", "CRM", "ADBE", "QCOM",
@@ -535,7 +538,15 @@ _UNIVERSE = [
 # accidentally mutate the canonical list via the alias.
 if len(_UNIVERSE) != 599 or len(set(_UNIVERSE)) != 599:
     raise RuntimeError(
-        f"_UNIVERSE must be exactly 599 unique stocks; "
+        f"_UNIVERSE core must be exactly 599 unique stocks; "
+        f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
+    )
+# Append the NYSE expansion (1,500 NYSE-only common stocks, largest market
+# cap first — see nyse_universe.py for the selection rules).
+_UNIVERSE = _UNIVERSE + list(NYSE_EXPANSION)
+if len(_UNIVERSE) != 2099 or len(set(_UNIVERSE)) != 2099:
+    raise RuntimeError(
+        f"core + NYSE expansion must be exactly 2099 unique stocks; "
         f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
     )
 _UNIVERSE = tuple(_UNIVERSE)
@@ -983,7 +994,7 @@ def _fetch_market_update() -> dict:
                 pass
 
     # Backfill anything the batch endpoint dropped — this is the fix that
-    # makes the breadth bar reflect all 599 stocks instead of ~150. Runs even
+    # makes the breadth bar reflect the full universe instead of ~150. Runs even
     # when the batch returned fewer than 2 rows, since that's the case where
     # the safety net matters most.
     #
@@ -1011,7 +1022,7 @@ def _fetch_market_update() -> dict:
             })
     sectors.sort(key=lambda x: x["change_pct"], reverse=True)
 
-    # Gainers / losers across the canonical 599-stock universe
+    # Gainers / losers across the canonical 2,099-stock universe
     stocks = []
     for ticker in _UNIVERSE:
         if ticker in have:
@@ -1054,7 +1065,7 @@ async def get_market_update() -> dict:
 
     Single-flight: when the cache is cold and stale, exactly one fetch runs
     even if many coroutines call concurrently. Without this lock each cold
-    caller fired its own 599-ticker batch + backfill in parallel, which
+    caller fired its own full-universe batch + backfill in parallel, which
     deepened Yahoo's throttle (the very condition that triggered backfill
     in the first place) and ballooned cold-load latency proportionally."""
     global _update_cache
@@ -1169,7 +1180,7 @@ def get_fund_categories() -> list[str]:
 
 # ── Stock Screener ─────────────────────────────────────────────────────────
 
-# The screener shows the same 599 stocks tracked by breadth and gainers/losers.
+# The screener shows the same 2,099 stocks tracked by breadth and gainers/losers.
 _SCREENER_UNIVERSE = _UNIVERSE
 
 _screener_data: list = []
@@ -1379,7 +1390,7 @@ async def get_screener() -> list[dict]:
 # These are the cure for "more users → more yfinance load → more throttling →
 # more errors". Without them every cache miss was paid by a real user request,
 # so user-visible cold-load latency scaled with traffic spikes and every TTL
-# expiry triggered a thundering herd of 599-ticker batch fetches that
+# expiry triggered a thundering herd of full-universe batch fetches that
 # deepened Yahoo's throttle. With them, exactly one refresher per process
 # talks to yfinance on a fixed schedule and every user request returns from
 # memory.

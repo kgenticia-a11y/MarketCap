@@ -110,7 +110,7 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         # Anonymous feedback — stricter window to deter spam.
         ("POST",  "/feedback",            5, 300, False),
         # ── Market-data endpoints (unauthenticated) ──────────────────────
-        # Screener is by far the most expensive: bulk-downloads the full 599-stock universe.
+        # Screener is by far the most expensive: bulk-downloads the full 2,099-stock universe.
         ("GET",   "/stocks/screener",     2,  60, False),
         # Market overview + update are also yfinance-heavy.
         ("GET",   "/stocks/market/",      5,  60, True),

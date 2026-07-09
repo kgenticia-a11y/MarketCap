@@ -142,7 +142,7 @@ async def lifespan(app: FastAPI):
     # refresher per process keeps the cache warm so every user request hits
     # memory, never yfinance. This is what makes the API stay fast as user
     # traffic grows — without it, every TTL expiry triggered a thundering
-    # herd of 599-ticker batch fetches that deepened Yahoo's throttle.
+    # herd of full-universe batch fetches that deepened Yahoo's throttle.
     update_refresh_task = asyncio.create_task(
         market_data.refresh_market_update_loop(), name="market-update-refresh-loop"
     )
