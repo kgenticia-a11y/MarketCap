@@ -219,6 +219,13 @@ async def lifespan(app: FastAPI):
 
 
 async def _warm_screener():
+    # Stagger behind the overview/market-update warmups. At boot, firing the
+    # 2,099-ticker screener .info refill at the same time as the (much
+    # lighter) overview and update fetches tripped Yahoo's per-IP rate limit
+    # hard enough that NOTHING warmed for many minutes — the dashboard
+    # showed nothing after every deploy. Two minutes lets the small caches
+    # win the race; the screener then refills against a calmer budget.
+    await asyncio.sleep(120)
     try:
         logger.info("Warming screener cache…")
         await market_data.get_screener()
