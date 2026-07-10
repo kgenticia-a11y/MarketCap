@@ -40,7 +40,28 @@ jobs:
             exit 1
           fi
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Preflight gate — the same checks scripts/deploy.sh runs locally
+      # (JWT strength + a real DATABASE_URL connection + SELECT 1), so a
+      # rotated or broken credential is blocked HERE instead of surfacing
+      # as a degraded production machine. Runs only when the DATABASE_URL
+      # and JWT_SECRET repository secrets are configured (they should
+      # mirror the Fly secrets); otherwise it is skipped with a notice.
+      - name: Preflight (DB + JWT checks)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$JWT_SECRET" ]; then
+            echo "::notice::DATABASE_URL / JWT_SECRET secrets not configured — skipping preflight. Add them (mirroring the Fly secrets) to gate deploys on a live DB check."
+            exit 0
+          fi
+          python3 -m pip install --quiet "sqlalchemy>=2" psycopg2-binary
+          python3 backend/scripts/preflight.py
+
+      # Pinned to the commit behind tag 1.6 — this job holds FLY_API_TOKEN,
+      # so a mutable ref (@master) would let an upstream push run arbitrary
+      # code with secret access on our next deploy.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       # --remote-only builds the image on Fly's builders, so the runner
       # doesn't need Docker. fly.toml lives in backend/.

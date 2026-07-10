@@ -19,7 +19,7 @@ import httpx
 import yfinance as yf
 
 from app.config import settings
-from app.services.nyse_universe import NYSE_EXPANSION
+from app.services.nyse_universe import NYSE_EXPANSION, assert_unique_universe
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,19 @@ _info_pool = ThreadPoolExecutor(
     max_workers=max(4, settings.yf_pool_size),
     thread_name_prefix="yf-info",
 )
+
+# Shared pool for chunked batch downloads. _download_chunked previously
+# created a throwaway 5-worker pool per call, so overlapping refresh loops
+# (overview / market-update / screener — all much longer now at 2,099
+# tickers) could stack 10-15+ concurrent Yahoo connections, past the
+# ~10-per-replica throttle ceiling documented in config.py. One shared pool
+# makes concurrent callers queue behind the same 5 download slots instead
+# of multiplying them.
+_download_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="yf-download")
+
+# Shared pool for the screener's batched `.info` fetches (previously a fresh
+# 6-worker pool per 40-ticker batch, uncounted against any budget).
+_screener_batch_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="yf-screener")
 
 
 async def _run(fn, *args, **kwargs):
@@ -532,23 +545,16 @@ _UNIVERSE = [
     "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
     "SE", "INFY", "WIT", "HDB", "IBN",
 ]
-# Real runtime check (asserts are stripped under `python -O`, and this
-# invariant is the whole point of the unification — it must survive prod).
+# Real runtime check (see assert_unique_universe — it must survive prod).
 # Freeze as a tuple so aliasing (_SCREENER_UNIVERSE = _UNIVERSE below) can't
 # accidentally mutate the canonical list via the alias.
-if len(_UNIVERSE) != 599 or len(set(_UNIVERSE)) != 599:
-    raise RuntimeError(
-        f"_UNIVERSE core must be exactly 599 unique stocks; "
-        f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
-    )
+assert_unique_universe("_UNIVERSE core", _UNIVERSE, expected=599)
 # Append the NYSE expansion (1,500 NYSE-only common stocks, largest market
-# cap first — see nyse_universe.py for the selection rules).
+# cap first — see nyse_universe.py for the selection rules). The combined
+# size is derived from the two pinned lists, so only a cross-list duplicate
+# can fail here — and the error names it.
 _UNIVERSE = _UNIVERSE + list(NYSE_EXPANSION)
-if len(_UNIVERSE) != 2099 or len(set(_UNIVERSE)) != 2099:
-    raise RuntimeError(
-        f"core + NYSE expansion must be exactly 2099 unique stocks; "
-        f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
-    )
+assert_unique_universe("_UNIVERSE (core + NYSE expansion)", _UNIVERSE)
 _UNIVERSE = tuple(_UNIVERSE)
 
 
@@ -588,6 +594,19 @@ def _fetch_gainers_losers() -> dict:
 
 
 async def get_gainers_losers() -> dict:
+    # The market-update refresh loop already downloads the full universe
+    # every ~4.5 min and keeps its result warm. Serve gainers/losers from
+    # that cache instead of re-downloading 2,099 tickers on the overview's
+    # faster (~60s) cadence — the two loops were independently duplicating
+    # the app's single heaviest fetch. Fall back to a direct fetch only
+    # while the update cache is cold or stale (first seconds after boot,
+    # or a prolonged upstream outage).
+    if _update_cache is not None and time.time() - _update_cache[1] < _UPDATE_TTL:
+        update = _update_cache[0]
+        gainers = [dict(s, volume=0) for s in update["gainers"][:6]]
+        losers = [dict(s, volume=0) for s in update["losers"][:6]]
+        if gainers or losers:
+            return {"gainers": gainers, "losers": losers}
     return await _run(_fetch_gainers_losers)
 
 
@@ -730,24 +749,24 @@ _SECTOR_ETFS = [
     ("XLC",  "Comm. Services"),
 ]
 
-def _download_chunked(tickers, period: str, chunk_size: int = 40, max_concurrent: int = 5):
+def _download_chunked(tickers, period: str, chunk_size: int = 40):
     """yf.download's wall-clock time scales with ticker count even with
     threads=True (Yahoo's batch endpoint has practical limits). Splitting
     into chunks and downloading them concurrently cuts total time roughly
     by a factor of len(chunks) — but firing every chunk at once trips
     Yahoo's rate limiter, which silently returns NaN columns instead of
-    erroring (so failures are invisible unless you count them). Capping
-    concurrency keeps the speedup without the silent data loss."""
+    erroring (so failures are invisible unless you count them). Chunks run
+    on the shared `_download_pool`, so overlapping callers queue behind the
+    same 5 slots rather than each adding 5 more Yahoo connections."""
     import pandas as pd
     chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     if len(chunks) == 1:
         return yf.download(tickers, period=period, interval="1d", auto_adjust=True, progress=False, threads=True)
 
-    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
-        frames = list(pool.map(
-            lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
-            chunks,
-        ))
+    frames = list(_download_pool.map(
+        lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
+        chunks,
+    ))
     return pd.concat(frames, axis=1)
 
 
@@ -772,20 +791,36 @@ def _fast_info_price_change(fi) -> tuple[float, float, float] | None:
 # is tracked in `_in_flight` so the next call doesn't re-submit the same
 # ticker on top of it. This keeps the user-visible cold path under BUDGET
 # without wasting Yahoo calls or piling up zombie work on the pool.
-_BACKFILL_BUDGET = 6.0
+#
+# The budget scales with how much work is actually queued: the old fixed 6s
+# was tuned for the 599-stock universe, where a bad throttle event dropped
+# tens of tickers. At 2,099 stocks the same event drops hundreds, and a
+# fixed 6s pass (≈52 recoveries) could never catch up — breadth and the
+# screener silently under-covered until Yahoo behaved again. FLOOR keeps
+# small passes snappy (cold user-facing paths); MAX bounds a mass-outage
+# pass so a refresh-loop tick can't stall for minutes.
+_BACKFILL_BUDGET_FLOOR = 6.0
+_BACKFILL_BUDGET_MAX = 30.0
 # Rough wall-clock cost of one fast_info call. Used to derive the per-call
 # cap from `yf_backfill_size * BUDGET / LATENCY` — submitting many more than
 # the pool can plausibly finish inside the budget is wasted Yahoo traffic.
 _BACKFILL_LATENCY_S = 0.5
 
 
-def _backfill_capacity() -> int:
-    """Realistic number of tickers one backfill pass can deliver. The
-    earlier hardcoded 150 cap lied — a 4-worker × 8s budget only finishes
-    ~64. Cap and budget must agree or operators read misleading logs
-    ("backfilling 150" → only 64 recovered)."""
+def _backfill_budget(missing_count: int) -> float:
+    """Wall-clock budget for one pass, scaled to the queued work."""
     workers = max(1, settings.yf_backfill_size)
-    return int(workers * (_BACKFILL_BUDGET / _BACKFILL_LATENCY_S)) + workers
+    need = missing_count * _BACKFILL_LATENCY_S / workers
+    return min(_BACKFILL_BUDGET_MAX, max(_BACKFILL_BUDGET_FLOOR, need))
+
+
+def _backfill_capacity(budget: float) -> int:
+    """Realistic number of tickers one backfill pass can deliver within
+    `budget`. The earlier hardcoded 150 cap lied — a 4-worker × 8s budget
+    only finishes ~64. Cap and budget must agree or operators read
+    misleading logs ("backfilling 150" → only 64 recovered)."""
+    workers = max(1, settings.yf_backfill_size)
+    return int(workers * (budget / _BACKFILL_LATENCY_S)) + workers
 
 
 def _fast_info_pair(ticker: str) -> tuple[str, float, float] | None:
@@ -868,11 +903,11 @@ def _backfill_missing(
     Yahoo's batch endpoint silently NaN-ing columns.
 
     Behaviour:
-    - Bounded by ``_BACKFILL_BUDGET`` wall-clock seconds, not per-future
-      timeout (one slow worker would block subsequent futures from
-      starting under a per-future timeout).
-    - Capped at ``_backfill_capacity()`` tickers per call so the cap and
-      the budget agree — submitting more is wasted Yahoo traffic.
+    - Bounded by a wall-clock budget scaled to the missing count (see
+      ``_backfill_budget``), not per-future timeout (one slow worker would
+      block subsequent futures from starting under a per-future timeout).
+    - Capped at ``_backfill_capacity(budget)`` tickers per call so the cap
+      and the budget agree — submitting more is wasted Yahoo traffic.
     - Tracks in-flight futures across calls in ``_in_flight`` so leftover
       work from a previous budget-exceeded call isn't duplicated.
     - ``skip_dead=False`` is for sector ETFs and other small fixed sets
@@ -910,7 +945,8 @@ def _backfill_missing(
     # Cap the *fresh* submissions to realistic capacity (in-flight ones are
     # free — they're already running). Logging the truncation surfaces
     # upstream degradation without making this call longer than the budget.
-    capacity = _backfill_capacity()
+    budget = _backfill_budget(len(missing))
+    capacity = _backfill_capacity(budget)
     if len(fresh) > capacity:
         logger.warning(
             "Yahoo batch dropped %d/%d tickers; backfilling %d this pass "
@@ -931,10 +967,10 @@ def _backfill_missing(
         return
 
     # `wait()` is the right primitive here: returns done/not_done sets after
-    # BUDGET. We DON'T cancel not_done — cancel() is a no-op for running
+    # the budget. We DON'T cancel not_done — cancel() is a no-op for running
     # futures, and `_in_flight` ensures the next call adopts them rather
     # than re-submitting.
-    done, not_done = fut_wait(futures, timeout=_BACKFILL_BUDGET)
+    done, not_done = fut_wait(futures, timeout=budget)
 
     recovered = 0
     for fut in done:
@@ -1210,6 +1246,62 @@ def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
     return _info_with_timeout(ticker, timeout)
 
 
+# Company metadata (name/sector/industry/52-week stats/PE/dividend rate)
+# changes slowly, but the screener was re-pulling full `.info` — Yahoo's
+# heaviest endpoint — for all 2,099 tickers on every ~29-min refresh. Cache
+# the .info-derived fields per ticker for 6h and refresh only price/change
+# each cycle. Bounded by the universe size, so no LRU machinery needed.
+# Volume (and its Low/Average/High bucket) rides along with the metadata,
+# so it can be up to 6h old — acceptable for a coarse screener column.
+_SCREENER_INFO_TTL = 6 * 3600
+_screener_info_cache: dict[str, tuple[dict, float]] = {}
+
+
+def _screener_row(ticker: str, price: float, change_pct: float) -> dict | None:
+    """Build one screener row: fresh price/change from the caller, slow
+    metadata from the 6h cache. Single shared implementation for the batch
+    screener (_fetch_screener_inner) and the streaming screener."""
+    try:
+        now = time.time()
+        entry = _screener_info_cache.get(ticker)
+        if entry is not None and now - entry[1] < _SCREENER_INFO_TTL:
+            meta = entry[0]
+        else:
+            info = _bounded_info(ticker)
+            raw_52 = info.get("52WeekChange")
+            pe = info.get("trailingPE")
+            volume = info.get("volume") or info.get("regularMarketVolume")
+            meta = {
+                "name":           info.get("longName") or info.get("shortName", ticker),
+                "sector":         info.get("sector")   or "Other",
+                "industry":       info.get("industry") or "",
+                "week_52_return": round(raw_52 * 100, 2) if raw_52 is not None else None,
+                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
+                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
+                "market_cap":     info.get("marketCap") or 0,
+                "pe_ratio":       round(pe, 2) if pe is not None else None,
+                "dividend_rate":  info.get("dividendRate") or 0,
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, info.get("averageVolume")),
+                "country":        info.get("country") or "United States",
+            }
+            # Don't cache a timed-out/empty .info — that would pin blank
+            # metadata for 6h after one transient throttle event.
+            if info:
+                _screener_info_cache[ticker] = (meta, now)
+        div_rate = meta["dividend_rate"]
+        row = {k: v for k, v in meta.items() if k != "dividend_rate"}
+        row["ticker"] = ticker
+        row["price"] = round(price, 2)
+        row["change_pct"] = round(change_pct, 2)
+        row["dividend_yield"] = round(
+            (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0, 4
+        )
+        return row
+    except Exception:
+        return None
+
+
 def _fetch_screener() -> list[dict]:
     global _screener_data, _screener_ts, _screener_fetching
 
@@ -1263,48 +1355,31 @@ def _fetch_screener_inner() -> list[dict]:
     }
 
     def fetch_info(ticker: str) -> dict | None:
-        try:
-            info = _bounded_info(ticker)
-            pd_  = price_map.get(ticker, {})
-            pe   = info.get("trailingPE")
-            mkt_cap = info.get("marketCap") or 0
-            price   = pd_.get("price", 0)
-            raw_52 = info.get("52WeekChange")
-            w52r   = round(raw_52 * 100, 2) if raw_52 is not None else None
-            div_rate  = info.get("dividendRate") or 0
-            div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
-            volume     = info.get("volume") or info.get("regularMarketVolume")
-            avg_volume = info.get("averageVolume")
-            return {
-                "ticker":         ticker,
-                "name":           info.get("longName") or info.get("shortName", ticker),
-                "sector":         info.get("sector")   or "Other",
-                "industry":       info.get("industry") or "",
-                "price":          round(price, 2),
-                "change_pct":     round(pd_.get("change_pct", 0), 2),
-                "week_52_return": w52r,
-                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
-                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
-                "market_cap":     mkt_cap,
-                "pe_ratio":       round(pe, 2) if pe is not None else None,
-                "dividend_yield": round(div_yield, 4),
-                "volume":         volume,
-                "volume_level":   _volume_level(volume, avg_volume),
-                "country":        info.get("country") or "United States",
-            }
-        except Exception:
-            return None
+        pd_ = price_map.get(ticker, {})
+        return _screener_row(ticker, pd_.get("price", 0), pd_.get("change_pct", 0))
 
     results: list[dict] = []
     batch_size = 40
     for i in range(0, len(tickers), batch_size):
         batch = tickers[i:i + batch_size]
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            futs = {pool.submit(fetch_info, t): t for t in batch}
-            for fut in as_completed(futs):
-                r = fut.result()
-                if r:
-                    results.append(r)
+        futs = {_screener_batch_pool.submit(fetch_info, t): t for t in batch}
+        for fut in as_completed(futs):
+            r = fut.result()
+            if r:
+                results.append(r)
+        # Publish a partial snapshot so concurrent requests — which land on
+        # the stale-cache path while _screener_fetching is claimed — see a
+        # growing list instead of an empty screener for the whole cold
+        # fetch (minutes at 2,099 tickers). Only when it beats what's
+        # cached: a stale-but-complete list outranks a partial one, so warm
+        # refreshes keep serving the old data until this fetch finishes.
+        # _screener_ts stays untouched, so the partial still counts as
+        # stale and never suppresses the completion write below.
+        if results:
+            partial = sorted(results, key=lambda x: x["market_cap"], reverse=True)
+            with _screener_lock:
+                if len(partial) > len(_screener_data):
+                    _screener_data = partial
         if i + batch_size < len(tickers):
             time.sleep(1.0)
 
@@ -1766,47 +1841,18 @@ async def stream_screener():
     total_expected = len(tickers)
 
     def _fetch_one(ticker: str) -> None:
-        try:
-            info  = _bounded_info(ticker)
-            pd_   = have.get(ticker)
-            price = pd_[0] if pd_ else 0.0
-            change = pd_[1] if pd_ else 0.0
-            pe    = info.get("trailingPE")
-            raw52 = info.get("52WeekChange")
-            div_r = info.get("dividendRate") or 0
-            volume     = info.get("volume") or info.get("regularMarketVolume")
-            avg_volume = info.get("averageVolume")
-            item  = {
-                "ticker":         ticker,
-                "name":           info.get("longName") or info.get("shortName", ticker),
-                "sector":         info.get("sector")   or "Other",
-                "industry":       info.get("industry") or "",
-                "price":          round(price, 2),
-                "change_pct":     round(change, 2),
-                "week_52_return": round(raw52 * 100, 2) if raw52 is not None else None,
-                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
-                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
-                "market_cap":     info.get("marketCap") or 0,
-                "pe_ratio":       round(pe, 2) if pe is not None else None,
-                "dividend_yield": round(
-                    (div_r / price * 100) if price > 0 and div_r > 0 else 0, 4
-                ),
-                "volume":         volume,
-                "volume_level":   _volume_level(volume, avg_volume),
-                "country":        info.get("country") or "United States",
-            }
-            loop.call_soon_threadsafe(queue.put_nowait, item)
-        except Exception:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+        pd_ = have.get(ticker)
+        item = _screener_row(ticker, pd_[0] if pd_ else 0.0, pd_[1] if pd_ else 0.0)
+        # item is None on failure — the consumer loop skips None entries.
+        loop.call_soon_threadsafe(queue.put_nowait, item)
 
     def _process_batches():
-        # Limit in-flight .info calls per batch — _pool has 16 workers but
-        # we throttle to 6 to avoid Yahoo's "Invalid Crumb" rate limit.
-        from concurrent.futures import ThreadPoolExecutor as _TPE
+        # Limit in-flight .info calls per batch — the shared 6-worker
+        # `_screener_batch_pool` throttles below Yahoo's "Invalid Crumb"
+        # rate limit and is the same budget _fetch_screener_inner uses.
         for i in range(0, len(tickers), batch_size):
             batch = tickers[i:i + batch_size]
-            with _TPE(max_workers=6) as p:
-                list(p.map(_fetch_one, batch))
+            list(_screener_batch_pool.map(_fetch_one, batch))
             if i + batch_size < len(tickers):
                 time.sleep(1.0)
 
@@ -1819,6 +1865,14 @@ async def stream_screener():
             if item is not None:
                 collected.append(item)
                 yield item
+                # Same progressive publish as _fetch_screener_inner: give
+                # concurrent stale-path requests partial rows during a cold
+                # stream instead of an empty screener.
+                if len(collected) % 40 == 0:
+                    partial = sorted(collected, key=lambda x: x["market_cap"], reverse=True)
+                    with _screener_lock:
+                        if len(partial) > len(_screener_data):
+                            _screener_data = partial
     except asyncio.TimeoutError:
         pass
     finally:
