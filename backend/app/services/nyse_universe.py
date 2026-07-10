@@ -15,6 +15,11 @@ Ordered largest market cap first. Symbols use Yahoo Finance notation
 (class shares use a dash: BRK-A, not BRK.A) because every fetch path goes
 through yfinance. NYSE-only by construction — do not add NASDAQ/AMEX symbols
 here; those belong in the core universe list.
+
+This list is a snapshot and goes stale as small caps delist or rename. Do
+not edit it by hand — regenerate it (quarterly is plenty) with:
+    python3 scripts/refresh_nyse_universe.py
+and review the resulting diff like any code change.
 """
 
 def assert_unique_universe(name: str, tickers, expected: int | None = None) -> None:
