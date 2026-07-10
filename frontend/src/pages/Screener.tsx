@@ -648,6 +648,30 @@ export default function Screener() {
     return rows;
   }, [data, search, filters, capFilter, sortField, sortDir, activePreset]);
 
+  // Render the (up to 2,099-row) result set incrementally: mounting every
+  // row at once re-layouts the whole list on each sort/filter/watch toggle,
+  // which visibly janks on low-end devices at the widened universe size.
+  // 200 rows cover a deep scroll; "Show more" extends in 300-row steps and
+  // the window resets whenever the result set changes shape.
+  const PAGE_SIZE = 200;
+  const PAGE_STEP = 300;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [data, search, filters, capFilter, sortField, sortDir, activePreset]);
+  const visible = useMemo(() => results.slice(0, visibleCount), [results, visibleCount]);
+  const hiddenCount = Math.max(0, results.length - visible.length);
+  const showMoreButton = hiddenCount > 0 && (
+    <div className="py-3 flex justify-center">
+      <button
+        onClick={() => setVisibleCount((c) => c + PAGE_STEP)}
+        className="px-4 py-2 rounded-lg bg-surface-hover text-xs text-muted hover:text-white transition-colors"
+      >
+        Show {Math.min(PAGE_STEP, hiddenCount)} more ({hiddenCount} remaining)
+      </button>
+    </div>
+  );
+
   function handleSort(field: SortField) {
     if (sortField === field) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
@@ -970,16 +994,19 @@ export default function Screener() {
             {results.length === 0 ? (
               <div className="py-12 text-center text-muted text-sm">No stocks match your filters.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {results.map((row) => (
-                  <StockCard
-                    key={row.ticker}
-                    row={row}
-                    isWatched={watchedSet.has(row.ticker)}
-                    onToggleWatch={() => watchMutation.mutate(row.ticker)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {visible.map((row) => (
+                    <StockCard
+                      key={row.ticker}
+                      row={row}
+                      isWatched={watchedSet.has(row.ticker)}
+                      onToggleWatch={() => watchMutation.mutate(row.ticker)}
+                    />
+                  ))}
+                </div>
+                {showMoreButton}
+              </>
             )}
           </div>
         )}
@@ -1016,7 +1043,7 @@ export default function Screener() {
                     </td>
                   </tr>
                 ) : (
-                  results.map((row, i) => {
+                  visible.map((row, i) => {
                     const watched = watchedSet.has(row.ticker);
                     return (
                       <tr
@@ -1079,6 +1106,7 @@ export default function Screener() {
                 )}
               </tbody>
             </table>
+            {showMoreButton}
           </div>
         )}
       </div>
