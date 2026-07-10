@@ -40,7 +40,10 @@ jobs:
             exit 1
           fi
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to the commit behind tag 1.6 — this job holds FLY_API_TOKEN,
+      # so a mutable ref (@master) would let an upstream push run arbitrary
+      # code with secret access on our next deploy.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       # --remote-only builds the image on Fly's builders, so the runner
       # doesn't need Docker. fly.toml lives in backend/.
