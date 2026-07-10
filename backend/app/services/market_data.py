@@ -1334,6 +1334,19 @@ def _fetch_screener_inner() -> list[dict]:
             r = fut.result()
             if r:
                 results.append(r)
+        # Publish a partial snapshot so concurrent requests — which land on
+        # the stale-cache path while _screener_fetching is claimed — see a
+        # growing list instead of an empty screener for the whole cold
+        # fetch (minutes at 2,099 tickers). Only when it beats what's
+        # cached: a stale-but-complete list outranks a partial one, so warm
+        # refreshes keep serving the old data until this fetch finishes.
+        # _screener_ts stays untouched, so the partial still counts as
+        # stale and never suppresses the completion write below.
+        if results:
+            partial = sorted(results, key=lambda x: x["market_cap"], reverse=True)
+            with _screener_lock:
+                if len(partial) > len(_screener_data):
+                    _screener_data = partial
         if i + batch_size < len(tickers):
             time.sleep(1.0)
 
@@ -1847,6 +1860,14 @@ async def stream_screener():
             if item is not None:
                 collected.append(item)
                 yield item
+                # Same progressive publish as _fetch_screener_inner: give
+                # concurrent stale-path requests partial rows during a cold
+                # stream instead of an empty screener.
+                if len(collected) % 40 == 0:
+                    partial = sorted(collected, key=lambda x: x["market_cap"], reverse=True)
+                    with _screener_lock:
+                        if len(partial) > len(_screener_data):
+                            _screener_data = partial
     except asyncio.TimeoutError:
         pass
     finally:
