@@ -243,8 +243,20 @@ async def market_overview():
     if _overview_cache is not None:
         return _overview_cache
 
+    # Cold cache (first minutes after boot). Under a Yahoo rate-limit storm
+    # the first fill can take minutes, and every request queued behind
+    # _overview_lock used to hang until the browser gave up — the dashboard
+    # section simply never rendered. Bound the wait: give the in-flight
+    # refresh a short window, then tell the client to retry. A fast 503 +
+    # Retry-After lets the frontend poll its way in the moment the cache
+    # lands, instead of dying on a 2-minute stalled request.
     try:
-        return await _refresh_overview()
+        return await asyncio.wait_for(_refresh_overview(), timeout=15)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            503, "Market data is warming up — retry shortly.",
+            headers={"Retry-After": "10"},
+        )
     except Exception:
         logger.exception("market_overview failed")
         raise HTTPException(502, "Market data unavailable.")
