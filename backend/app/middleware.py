@@ -116,8 +116,6 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         ("GET",   "/stocks/market/",      5,  60, True),
         # All other /stocks/* (quote, details, chart, income…) — generous but bounded.
         ("GET",   "/stocks/",            30,  60, True),
-        # News feed.
-        ("GET",   "/news",               20,  60, False),
         # Backtest hits yfinance history every call — 1-3s upstream per
         # request. Keep it bounded so a hot-clicking user can't melt the
         # event loop or Yahoo's per-IP budget.

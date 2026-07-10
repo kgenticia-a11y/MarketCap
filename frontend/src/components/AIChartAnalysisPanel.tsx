@@ -8,7 +8,6 @@ interface Props {
   price: number;
   changePct: number;
   bars: Array<{ c: number; h?: number; l?: number; v?: number }>;
-  news: { title: string }[];
 }
 
 interface ChartAnalysis {
@@ -19,7 +18,7 @@ interface ChartAnalysis {
   disclaimer: string;
 }
 
-export default function AIChartAnalysisPanel({ ticker, range, price, changePct, bars, news }: Props) {
+export default function AIChartAnalysisPanel({ ticker, range, price, changePct, bars }: Props) {
   const [analysis, setAnalysis] = useState<ChartAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +35,6 @@ export default function AIChartAnalysisPanel({ ticker, range, price, changePct, 
       const result = await analyzeChart({
         ticker, range, price, change_pct: changePct,
         bars: bars.map((b) => ({ c: b.c, h: b.h, l: b.l, v: b.v })),
-        news: news.map((n) => ({ title: n.title })),
       });
       setAnalysis(result);
     } catch (e: unknown) {

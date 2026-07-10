@@ -10,7 +10,6 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import InteractiveChart from "./pages/InteractiveChart";
-import NewsPage from "./pages/News";
 import IncomeEstimator from "./pages/IncomeEstimator";
 import MarketUpdate from "./pages/MarketUpdate";
 import History from "./pages/History";
@@ -51,7 +50,6 @@ function AppRoutes() {
       <Route path="/funds"    element={<Private title="Mutual Funds"><MutualFunds /></Private>} />
       <Route path="/settings" element={<Private title="Settings"><Settings /></Private>} />
       <Route path="/history"  element={<Private title="History"><History /></Private>} />
-      <Route path="/news"     element={<Private title="News"><NewsPage /></Private>} />
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
       <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />

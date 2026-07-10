@@ -4,9 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getChart, getQuote, searchStocks } from "../api/stocks";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "../api/watchlist";
 import { addToPortfolio } from "../api/portfolio";
-import { getNews } from "../api/news";
 import CandlestickChart from "../components/CandlestickChart";
-import NewsCard from "../components/NewsCard";
 import AIChartAnalysisPanel from "../components/AIChartAnalysisPanel";
 import { Star, Plus, TrendingUp, TrendingDown, Search, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -138,12 +136,6 @@ export default function InteractiveChart() {
     enabled: !!user,
   });
 
-  const { data: newsData } = useQuery({
-    queryKey: ["news", activeTicker],
-    queryFn: () => getNews(activeTicker, 5),
-    staleTime: 120_000,
-  });
-
   const isWatched = watchlistData?.some((w: { ticker: string }) => w.ticker === activeTicker) ?? false;
 
   const watchMutation = useMutation({
@@ -164,7 +156,6 @@ export default function InteractiveChart() {
   const price: number = quote?.price ?? 0;
   const changePct: number = quote?.change_pct ?? 0;
   const positive = changePct >= 0;
-  const newsItems = newsData?.results ?? [];
 
   const openPortModal = () => setModal({ shares: "1", price: price.toFixed(2) });
 
@@ -346,28 +337,14 @@ export default function InteractiveChart() {
           </div>
         </div>
 
-        {/* Right panel — News + AI */}
+        {/* Right panel — AI */}
         <aside className="w-72 shrink-0 border-l border-border overflow-y-auto bg-sidebar">
-          <div className="p-4">
-            <h3 className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">{activeTicker} News</h3>
-            <div className="space-y-2">
-              {newsItems.length === 0 ? (
-                <p className="text-xs text-muted">No recent news.</p>
-              ) : (
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                newsItems.map((item: any) => (
-                  <NewsCard key={item.id} item={item} compact />
-                ))
-              )}
-            </div>
-          </div>
           <AIChartAnalysisPanel
             ticker={activeTicker}
             range={range}
             price={price}
             changePct={changePct}
             bars={bars as never}
-            news={newsItems as { title: string }[]}
           />
         </aside>
       </div>

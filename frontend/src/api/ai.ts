@@ -15,7 +15,6 @@ export const analyzeChart = (payload: {
   price: number;
   change_pct: number;
   bars: ChartBar[];
-  news: { title: string }[];
 }) => client.post("/ai/chart-analysis", payload).then((r) => r.data);
 
 export const getEarningsBrief = (payload: {

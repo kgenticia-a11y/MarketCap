@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, news, portfolio, watchlist, history, feedback, alerts, admin, screener, paper_trading, accounts, ai
+from app.routers import auth, stocks, portfolio, watchlist, history, feedback, alerts, admin, screener, paper_trading, accounts, ai
 from app.services import market_data
 from app.services.alert_evaluator import alert_evaluation_loop
 from app.services.auto_fixer import run_auto_fixer
@@ -302,7 +302,6 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router)
 app.include_router(stocks.router)
-app.include_router(news.router)
 app.include_router(portfolio.router)
 app.include_router(watchlist.router)
 app.include_router(history.router)

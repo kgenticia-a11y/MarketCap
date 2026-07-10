@@ -134,7 +134,7 @@ export default function Terms() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">4. Market Data; Third-Party Sources</h2>
             <p>
-              Market data, fundamentals, news headlines, earnings dates, and similar content are
+              Market data, fundamentals, earnings dates, and similar content are
               sourced from third-party providers and public sources. Such data may be delayed (in
               many cases by 15 minutes or more), incomplete, inaccurate, or unavailable. We do not
               warrant the accuracy, completeness, timeliness, or fitness of any data displayed,

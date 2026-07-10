@@ -8,7 +8,6 @@ import {
   Briefcase,
   Settings,
   History,
-  Newspaper,
   MessageSquare,
   LogOut,
   LogIn,
@@ -53,7 +52,6 @@ const account = [
 ];
 
 const more = [
-  { label: "News",     icon: Newspaper,     to: "/news" },
   { label: "Feedback", icon: MessageSquare, to: "/feedback" },
 ];
 

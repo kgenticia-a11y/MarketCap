@@ -1,7 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { getMarketOverview } from "../api/stocks";
-import { getNews } from "../api/news";
-import NewsCard from "../components/NewsCard";
 import ErrorBoundary from "../components/ErrorBoundary";
 import DailyBriefCard from "../components/DailyBriefCard";
 import { TrendingUp, TrendingDown } from "lucide-react";
@@ -53,13 +51,6 @@ export default function Home() {
     retry: 2,
   });
 
-  const { data: newsData, isLoading: newsLoading } = useQuery({
-    queryKey: ["news"],
-    queryFn: () => getNews(undefined, 6),
-    staleTime: 120_000,
-  });
-
-  const newsItems = newsData?.results ?? [];
   const gainers: StockSnap[] = overview?.gainers ?? [];
   const losers: StockSnap[] = overview?.losers ?? [];
 
@@ -148,21 +139,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* News */}
-      <div className="bg-surface rounded-xl border border-border overflow-hidden">
-        <div className="px-5 py-3 border-b border-border">
-          <span className="text-xs font-semibold text-white">Market News</span>
-        </div>
-        <div className="p-4 grid grid-cols-2 gap-3">
-          {newsLoading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-24 bg-surface-hover rounded-xl animate-pulse" />
-              ))
-            : newsItems.map((item: { id?: string; article_url?: string }, i: number) => (
-                <NewsCard key={item.id ?? item.article_url ?? i} item={item as Parameters<typeof NewsCard>[0]["item"]} />
-              ))}
-        </div>
-      </div>
     </div>
     </ErrorBoundary>
   );
