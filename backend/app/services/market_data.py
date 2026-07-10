@@ -772,20 +772,36 @@ def _fast_info_price_change(fi) -> tuple[float, float, float] | None:
 # is tracked in `_in_flight` so the next call doesn't re-submit the same
 # ticker on top of it. This keeps the user-visible cold path under BUDGET
 # without wasting Yahoo calls or piling up zombie work on the pool.
-_BACKFILL_BUDGET = 6.0
+#
+# The budget scales with how much work is actually queued: the old fixed 6s
+# was tuned for the 599-stock universe, where a bad throttle event dropped
+# tens of tickers. At 2,099 stocks the same event drops hundreds, and a
+# fixed 6s pass (≈52 recoveries) could never catch up — breadth and the
+# screener silently under-covered until Yahoo behaved again. FLOOR keeps
+# small passes snappy (cold user-facing paths); MAX bounds a mass-outage
+# pass so a refresh-loop tick can't stall for minutes.
+_BACKFILL_BUDGET_FLOOR = 6.0
+_BACKFILL_BUDGET_MAX = 30.0
 # Rough wall-clock cost of one fast_info call. Used to derive the per-call
 # cap from `yf_backfill_size * BUDGET / LATENCY` — submitting many more than
 # the pool can plausibly finish inside the budget is wasted Yahoo traffic.
 _BACKFILL_LATENCY_S = 0.5
 
 
-def _backfill_capacity() -> int:
-    """Realistic number of tickers one backfill pass can deliver. The
-    earlier hardcoded 150 cap lied — a 4-worker × 8s budget only finishes
-    ~64. Cap and budget must agree or operators read misleading logs
-    ("backfilling 150" → only 64 recovered)."""
+def _backfill_budget(missing_count: int) -> float:
+    """Wall-clock budget for one pass, scaled to the queued work."""
     workers = max(1, settings.yf_backfill_size)
-    return int(workers * (_BACKFILL_BUDGET / _BACKFILL_LATENCY_S)) + workers
+    need = missing_count * _BACKFILL_LATENCY_S / workers
+    return min(_BACKFILL_BUDGET_MAX, max(_BACKFILL_BUDGET_FLOOR, need))
+
+
+def _backfill_capacity(budget: float) -> int:
+    """Realistic number of tickers one backfill pass can deliver within
+    `budget`. The earlier hardcoded 150 cap lied — a 4-worker × 8s budget
+    only finishes ~64. Cap and budget must agree or operators read
+    misleading logs ("backfilling 150" → only 64 recovered)."""
+    workers = max(1, settings.yf_backfill_size)
+    return int(workers * (budget / _BACKFILL_LATENCY_S)) + workers
 
 
 def _fast_info_pair(ticker: str) -> tuple[str, float, float] | None:
@@ -868,11 +884,11 @@ def _backfill_missing(
     Yahoo's batch endpoint silently NaN-ing columns.
 
     Behaviour:
-    - Bounded by ``_BACKFILL_BUDGET`` wall-clock seconds, not per-future
-      timeout (one slow worker would block subsequent futures from
-      starting under a per-future timeout).
-    - Capped at ``_backfill_capacity()`` tickers per call so the cap and
-      the budget agree — submitting more is wasted Yahoo traffic.
+    - Bounded by a wall-clock budget scaled to the missing count (see
+      ``_backfill_budget``), not per-future timeout (one slow worker would
+      block subsequent futures from starting under a per-future timeout).
+    - Capped at ``_backfill_capacity(budget)`` tickers per call so the cap
+      and the budget agree — submitting more is wasted Yahoo traffic.
     - Tracks in-flight futures across calls in ``_in_flight`` so leftover
       work from a previous budget-exceeded call isn't duplicated.
     - ``skip_dead=False`` is for sector ETFs and other small fixed sets
@@ -910,7 +926,8 @@ def _backfill_missing(
     # Cap the *fresh* submissions to realistic capacity (in-flight ones are
     # free — they're already running). Logging the truncation surfaces
     # upstream degradation without making this call longer than the budget.
-    capacity = _backfill_capacity()
+    budget = _backfill_budget(len(missing))
+    capacity = _backfill_capacity(budget)
     if len(fresh) > capacity:
         logger.warning(
             "Yahoo batch dropped %d/%d tickers; backfilling %d this pass "
@@ -931,10 +948,10 @@ def _backfill_missing(
         return
 
     # `wait()` is the right primitive here: returns done/not_done sets after
-    # BUDGET. We DON'T cancel not_done — cancel() is a no-op for running
+    # the budget. We DON'T cancel not_done — cancel() is a no-op for running
     # futures, and `_in_flight` ensures the next call adopts them rather
     # than re-submitting.
-    done, not_done = fut_wait(futures, timeout=_BACKFILL_BUDGET)
+    done, not_done = fut_wait(futures, timeout=budget)
 
     recovered = 0
     for fut in done:
