@@ -16,6 +16,35 @@ jobs:
         run: |
           curl -sS https://marketcap-backend.fly.dev/health; echo
 
+      - name: Market overview (timed, twice — second hit must be cache-fast)
+        run: |
+          for i in 1 2; do
+            code_time=$(curl -sS -o overview.json -w "%{http_code} %{time_total}s" \
+              --max-time 120 https://marketcap-backend.fly.dev/stocks/market/overview || echo "FAILED")
+            echo "attempt $i: $code_time"
+            python3 - <<'EOF' || true
+          import json
+          d = json.load(open("overview.json"))
+          print(f"  indices={len(d.get('indices', []))} gainers={len(d.get('gainers', []))} losers={len(d.get('losers', []))}")
+          EOF
+          done
+
+      - name: Fly machine status and recent logs
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::notice::FLY_API_TOKEN not set — skipping Fly status/logs."
+            exit 0
+          fi
+          curl -L https://fly.io/install.sh | sh > /dev/null
+          export FLYCTL_INSTALL="$HOME/.fly"
+          export PATH="$FLYCTL_INSTALL/bin:$PATH"
+          echo "== fly status =="
+          flyctl status --app marketcap-backend || true
+          echo "== recent logs (errors, warnings, restarts, OOM) =="
+          flyctl logs --app marketcap-backend --no-tail 2>/dev/null | tail -120 || true
+
       - name: Market update breadth
         run: |
           curl -sS https://marketcap-backend.fly.dev/stocks/market/update -o update.json
