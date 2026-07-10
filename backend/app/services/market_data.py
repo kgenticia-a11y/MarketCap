@@ -1253,6 +1253,62 @@ def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
     return _info_with_timeout(ticker, timeout)
 
 
+# Company metadata (name/sector/industry/52-week stats/PE/dividend rate)
+# changes slowly, but the screener was re-pulling full `.info` — Yahoo's
+# heaviest endpoint — for all 2,099 tickers on every ~29-min refresh. Cache
+# the .info-derived fields per ticker for 6h and refresh only price/change
+# each cycle. Bounded by the universe size, so no LRU machinery needed.
+# Volume (and its Low/Average/High bucket) rides along with the metadata,
+# so it can be up to 6h old — acceptable for a coarse screener column.
+_SCREENER_INFO_TTL = 6 * 3600
+_screener_info_cache: dict[str, tuple[dict, float]] = {}
+
+
+def _screener_row(ticker: str, price: float, change_pct: float) -> dict | None:
+    """Build one screener row: fresh price/change from the caller, slow
+    metadata from the 6h cache. Single shared implementation for the batch
+    screener (_fetch_screener_inner) and the streaming screener."""
+    try:
+        now = time.time()
+        entry = _screener_info_cache.get(ticker)
+        if entry is not None and now - entry[1] < _SCREENER_INFO_TTL:
+            meta = entry[0]
+        else:
+            info = _bounded_info(ticker)
+            raw_52 = info.get("52WeekChange")
+            pe = info.get("trailingPE")
+            volume = info.get("volume") or info.get("regularMarketVolume")
+            meta = {
+                "name":           info.get("longName") or info.get("shortName", ticker),
+                "sector":         info.get("sector")   or "Other",
+                "industry":       info.get("industry") or "",
+                "week_52_return": round(raw_52 * 100, 2) if raw_52 is not None else None,
+                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
+                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
+                "market_cap":     info.get("marketCap") or 0,
+                "pe_ratio":       round(pe, 2) if pe is not None else None,
+                "dividend_rate":  info.get("dividendRate") or 0,
+                "volume":         volume,
+                "volume_level":   _volume_level(volume, info.get("averageVolume")),
+                "country":        info.get("country") or "United States",
+            }
+            # Don't cache a timed-out/empty .info — that would pin blank
+            # metadata for 6h after one transient throttle event.
+            if info:
+                _screener_info_cache[ticker] = (meta, now)
+        div_rate = meta["dividend_rate"]
+        row = {k: v for k, v in meta.items() if k != "dividend_rate"}
+        row["ticker"] = ticker
+        row["price"] = round(price, 2)
+        row["change_pct"] = round(change_pct, 2)
+        row["dividend_yield"] = round(
+            (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0, 4
+        )
+        return row
+    except Exception:
+        return None
+
+
 def _fetch_screener() -> list[dict]:
     global _screener_data, _screener_ts, _screener_fetching
 
@@ -1306,37 +1362,8 @@ def _fetch_screener_inner() -> list[dict]:
     }
 
     def fetch_info(ticker: str) -> dict | None:
-        try:
-            info = _bounded_info(ticker)
-            pd_  = price_map.get(ticker, {})
-            pe   = info.get("trailingPE")
-            mkt_cap = info.get("marketCap") or 0
-            price   = pd_.get("price", 0)
-            raw_52 = info.get("52WeekChange")
-            w52r   = round(raw_52 * 100, 2) if raw_52 is not None else None
-            div_rate  = info.get("dividendRate") or 0
-            div_yield = (div_rate / price * 100) if price > 0 and div_rate > 0 else 0.0
-            volume     = info.get("volume") or info.get("regularMarketVolume")
-            avg_volume = info.get("averageVolume")
-            return {
-                "ticker":         ticker,
-                "name":           info.get("longName") or info.get("shortName", ticker),
-                "sector":         info.get("sector")   or "Other",
-                "industry":       info.get("industry") or "",
-                "price":          round(price, 2),
-                "change_pct":     round(pd_.get("change_pct", 0), 2),
-                "week_52_return": w52r,
-                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
-                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
-                "market_cap":     mkt_cap,
-                "pe_ratio":       round(pe, 2) if pe is not None else None,
-                "dividend_yield": round(div_yield, 4),
-                "volume":         volume,
-                "volume_level":   _volume_level(volume, avg_volume),
-                "country":        info.get("country") or "United States",
-            }
-        except Exception:
-            return None
+        pd_ = price_map.get(ticker, {})
+        return _screener_row(ticker, pd_.get("price", 0), pd_.get("change_pct", 0))
 
     results: list[dict] = []
     batch_size = 40
@@ -1821,38 +1848,10 @@ async def stream_screener():
     total_expected = len(tickers)
 
     def _fetch_one(ticker: str) -> None:
-        try:
-            info  = _bounded_info(ticker)
-            pd_   = have.get(ticker)
-            price = pd_[0] if pd_ else 0.0
-            change = pd_[1] if pd_ else 0.0
-            pe    = info.get("trailingPE")
-            raw52 = info.get("52WeekChange")
-            div_r = info.get("dividendRate") or 0
-            volume     = info.get("volume") or info.get("regularMarketVolume")
-            avg_volume = info.get("averageVolume")
-            item  = {
-                "ticker":         ticker,
-                "name":           info.get("longName") or info.get("shortName", ticker),
-                "sector":         info.get("sector")   or "Other",
-                "industry":       info.get("industry") or "",
-                "price":          round(price, 2),
-                "change_pct":     round(change, 2),
-                "week_52_return": round(raw52 * 100, 2) if raw52 is not None else None,
-                "week_52_high":   round(info.get("fiftyTwoWeekHigh") or 0, 2) or None,
-                "week_52_low":    round(info.get("fiftyTwoWeekLow")  or 0, 2) or None,
-                "market_cap":     info.get("marketCap") or 0,
-                "pe_ratio":       round(pe, 2) if pe is not None else None,
-                "dividend_yield": round(
-                    (div_r / price * 100) if price > 0 and div_r > 0 else 0, 4
-                ),
-                "volume":         volume,
-                "volume_level":   _volume_level(volume, avg_volume),
-                "country":        info.get("country") or "United States",
-            }
-            loop.call_soon_threadsafe(queue.put_nowait, item)
-        except Exception:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+        pd_ = have.get(ticker)
+        item = _screener_row(ticker, pd_[0] if pd_ else 0.0, pd_[1] if pd_ else 0.0)
+        # item is None on failure — the consumer loop skips None entries.
+        loop.call_soon_threadsafe(queue.put_nowait, item)
 
     def _process_batches():
         # Limit in-flight .info calls per batch — the shared 6-worker
