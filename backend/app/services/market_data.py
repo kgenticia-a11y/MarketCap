@@ -116,13 +116,11 @@ class _BoundedTTLCache:
 # but tight enough that a scanner/scraper can't blow the process memory.
 _QUOTE_CACHE_MAX   = 4_000
 _DETAILS_CACHE_MAX = 4_000
-_NEWS_CACHE_MAX    = 1_000
 _CHART_CACHE_MAX   = 4_000  # keyed by ticker+range+date, so ~6 ranges × tickers
 _FUNDS_CACHE_MAX   =    50
 
 _quote_cache:   _BoundedTTLCache = _BoundedTTLCache(_QUOTE_CACHE_MAX)
 _details_cache: _BoundedTTLCache = _BoundedTTLCache(_DETAILS_CACHE_MAX)
-_news_cache:    _BoundedTTLCache = _BoundedTTLCache(_NEWS_CACHE_MAX)
 _chart_cache:   _BoundedTTLCache = _BoundedTTLCache(_CHART_CACHE_MAX)
 _funds_cache:   _BoundedTTLCache = _BoundedTTLCache(_FUNDS_CACHE_MAX)
 _update_cache:  tuple[dict, float] | None = None
@@ -130,7 +128,6 @@ _update_lock = asyncio.Lock()
 
 _QUOTE_TTL   =  30   # seconds — price data refreshes frequently
 _DETAILS_TTL = 300   # 5 min  — company fundamentals rarely change intraday
-_NEWS_TTL    = 300   # 5 min  — news feed doesn't need per-second freshness
 _CHART_1D_TTL  =  60   # 1 min  — intraday candles need to be fairly fresh
 _CHART_TTL     = 300   # 5 min  — daily/weekly/monthly candles
 _UPDATE_TTL  = 300   # 5 min  — market-update sector/breadth data
@@ -142,7 +139,6 @@ _FUNDS_TTL   = 600   # 10 min — fund data changes slowly
 # to serve and the user blocks on a fresh fetch (correctness over speed).
 _QUOTE_SWR_MAX   = _QUOTE_TTL   *  4   # 2 min  — still tradeable
 _DETAILS_SWR_MAX = _DETAILS_TTL *  6   # 30 min — descriptive fields rarely change
-_NEWS_SWR_MAX    = _NEWS_TTL    *  3   # 15 min
 _CHART_SWR_MAX   = _CHART_TTL   *  3   # 15 min — daily candles
 _CHART_1D_SWR_MAX= _CHART_1D_TTL*  3   # 3 min  — intraday
 _FUNDS_SWR_MAX   = _FUNDS_TTL   *  3   # 30 min
@@ -154,7 +150,6 @@ _FUNDS_SWR_MAX   = _FUNDS_TTL   *  3   # 30 min
 _inflight_quote:   dict[str, asyncio.Future] = {}
 _inflight_details: dict[str, asyncio.Future] = {}
 _inflight_chart:   dict[str, asyncio.Future] = {}
-_inflight_news:    dict[str, asyncio.Future] = {}
 _inflight_funds:   dict[str, asyncio.Future] = {}
 
 
@@ -657,80 +652,6 @@ def _fetch_income_data(ticker: str) -> dict:
 
 async def get_income_data(ticker: str) -> dict:
     return await _run(_fetch_income_data, ticker.upper())
-
-
-# ── News ───────────────────────────────────────────────────────────────────
-
-def _fetch_news_yf(ticker: str | None, limit: int) -> list[dict]:
-    if ticker:
-        articles = yf.Ticker(ticker).news or []
-    else:
-        # General market news: merge news from index ETFs
-        seen, articles = set(), []
-        for sym in ["SPY", "QQQ", "AAPL"]:
-            for a in (yf.Ticker(sym).news or []):
-                uid = a.get("id") or a.get("uuid") or a.get("link") or None
-                if uid and uid not in seen:
-                    seen.add(uid)
-                    articles.append(a)
-            if len(articles) >= limit:
-                break
-
-    results = []
-    for a in articles[:limit]:
-        content = a.get("content", {})
-        # yfinance >=0.2.50 wraps fields under "content"
-        title     = content.get("title") or a.get("title", "")
-        _canonical = content.get("canonicalUrl")
-        link       = (_canonical.get("url") if isinstance(_canonical, dict) else None) or a.get("link", "")
-        _provider  = content.get("provider")
-        publisher  = (_provider.get("displayName") if isinstance(_provider, dict) else None) or a.get("publisher", "Yahoo Finance")
-        pub_ts    = a.get("providerPublishTime") or 0
-        thumbnail = a.get("thumbnail", {})
-        resolutions = thumbnail.get("resolutions", []) if isinstance(thumbnail, dict) else []
-        image = resolutions[0].get("url", "") if resolutions else ""
-
-        try:
-            pub_iso = datetime.fromtimestamp(pub_ts).isoformat() + "Z" if pub_ts else ""
-        except Exception:
-            pub_iso = ""
-
-        results.append({
-            "id": link or (str(pub_ts) if pub_ts else str(id(a))),
-            "title": title,
-            "description": "",
-            "article_url": link,
-            "image_url": image,
-            "published_utc": pub_iso,
-            "publisher": {"name": publisher},
-        })
-    return results
-
-
-async def _fetch_news_async(cache_key: str, ticker: str | None, limit: int) -> dict:
-    results = await _run(_fetch_news_yf, ticker, limit)
-    payload = {"results": results, "status": "OK"}
-    _news_cache.set(cache_key, payload, time.time())
-    return payload
-
-
-async def get_news(ticker: str = None, limit: int = 10) -> dict:
-    cache_key = ticker.upper() if ticker else "__market__"
-    now = time.time()
-    entry = _news_cache.get(cache_key)
-    if entry is not None:
-        age = now - entry[1]
-        if age < _NEWS_TTL:
-            return entry[0]
-        if age < _NEWS_SWR_MAX:
-            return _swr_serve_and_refresh(
-                cache_key, entry, _inflight_news,
-                lambda: _fetch_news_async(cache_key, ticker, limit),
-            )
-    return await _singleflight(
-        _inflight_news, cache_key,
-        lambda: _fetch_news_async(cache_key, ticker, limit),
-    )
 
 
 # ── Market Update ──────────────────────────────────────────────────────────

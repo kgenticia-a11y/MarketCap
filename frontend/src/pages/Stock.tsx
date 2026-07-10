@@ -2,12 +2,10 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQuote, getDetails } from "../api/stocks";
-import { getNews } from "../api/news";
 import { addToPortfolio } from "../api/portfolio";
 import { addToWatchlist, removeFromWatchlist, getWatchlist } from "../api/watchlist";
 import { createAlert } from "../api/alerts";
 import StockChart from "../components/StockChart";
-import NewsCard from "../components/NewsCard";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { Star, Plus, Building2, TrendingUp, TrendingDown, Bell, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -31,12 +29,6 @@ export default function Stock() {
     queryKey: ["details", upper],
     queryFn: () => getDetails(upper),
     staleTime: 300_000,
-  });
-
-  const { data: newsData, isLoading: newsLoading } = useQuery({
-    queryKey: ["news", upper],
-    queryFn: () => getNews(upper, 6),
-    staleTime: 120_000,
   });
 
   const { data: watchlistData } = useQuery({
@@ -110,7 +102,6 @@ export default function Stock() {
   const priceDisplay = price !== null ? `$${price.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
 
   const info = details?.results ?? {};
-  const newsItems = newsData?.results ?? [];
 
   const stats = [
     { label: "Price",      value: priceDisplay },
@@ -213,22 +204,6 @@ export default function Stock() {
             </div>
           )}
         </div>
-
-        <ErrorBoundary label="News failed to load">
-        <div className="lg:col-span-2 bg-surface rounded-xl border border-border p-4">
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">{upper} News</h3>
-          <div className="space-y-2">
-            {newsLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-20 bg-surface-hover rounded-xl animate-pulse" />
-                ))
-              : newsItems.length === 0
-                ? <p className="text-xs text-muted">No recent news.</p>
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                : newsItems.map((item: any) => <NewsCard key={item.id} item={item} />)}
-          </div>
-        </div>
-        </ErrorBoundary>
       </div>
 
       {/* Alert modal */}
