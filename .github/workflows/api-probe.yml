@@ -1,0 +1,58 @@
+# On-demand production probe: reports how much of the 2,099-stock universe
+# the live backend is actually serving (breadth coverage + screener rows).
+# Manual trigger only — never runs on push.
+
+name: API Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Check live universe coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health
+        run: |
+          curl -sS https://marketcap-backend.fly.dev/health; echo
+
+      - name: Market update breadth
+        run: |
+          curl -sS https://marketcap-backend.fly.dev/stocks/market/update -o update.json
+          python3 - <<'EOF'
+          import json
+          d = json.load(open("update.json"))
+          b = d.get("breadth", {})
+          print(f"breadth: advances={b.get('advances')} declines={b.get('declines')} "
+                f"unchanged={b.get('unchanged')} total={b.get('total')} (universe=2099)")
+          print(f"sectors={len(d.get('sectors', []))} gainers={len(d.get('gainers', []))} "
+                f"losers={len(d.get('losers', []))}")
+          EOF
+
+      - name: Screener row count
+        run: |
+          # Streams NDJSON; on a warm cache this returns immediately. Count
+          # rows and show how many have a real price vs price 0 (dead/missing).
+          curl -sS -N --max-time 600 https://marketcap-backend.fly.dev/stocks/screener -o screener.ndjson
+          python3 - <<'EOF'
+          import json
+          rows, priced, zero, errors = 0, 0, 0, 0
+          for line in open("screener.ndjson"):
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  r = json.loads(line)
+              except ValueError:
+                  errors += 1
+                  continue
+              if "error" in r:
+                  errors += 1
+                  continue
+              rows += 1
+              if r.get("price"):
+                  priced += 1
+              else:
+                  zero += 1
+          print(f"screener rows={rows} (universe=2099)  priced={priced}  price_zero={zero}  malformed/error={errors}")
+          EOF
