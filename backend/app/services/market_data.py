@@ -601,6 +601,19 @@ def _fetch_gainers_losers() -> dict:
 
 
 async def get_gainers_losers() -> dict:
+    # The market-update refresh loop already downloads the full universe
+    # every ~4.5 min and keeps its result warm. Serve gainers/losers from
+    # that cache instead of re-downloading 2,099 tickers on the overview's
+    # faster (~60s) cadence — the two loops were independently duplicating
+    # the app's single heaviest fetch. Fall back to a direct fetch only
+    # while the update cache is cold or stale (first seconds after boot,
+    # or a prolonged upstream outage).
+    if _update_cache is not None and time.time() - _update_cache[1] < _UPDATE_TTL:
+        update = _update_cache[0]
+        gainers = [dict(s, volume=0) for s in update["gainers"][:6]]
+        losers = [dict(s, volume=0) for s in update["losers"][:6]]
+        if gainers or losers:
+            return {"gainers": gainers, "losers": losers}
     return await _run(_fetch_gainers_losers)
 
 
