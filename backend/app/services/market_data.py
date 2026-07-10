@@ -47,6 +47,19 @@ _info_pool = ThreadPoolExecutor(
     thread_name_prefix="yf-info",
 )
 
+# Shared pool for chunked batch downloads. _download_chunked previously
+# created a throwaway 5-worker pool per call, so overlapping refresh loops
+# (overview / market-update / screener — all much longer now at 2,099
+# tickers) could stack 10-15+ concurrent Yahoo connections, past the
+# ~10-per-replica throttle ceiling documented in config.py. One shared pool
+# makes concurrent callers queue behind the same 5 download slots instead
+# of multiplying them.
+_download_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="yf-download")
+
+# Shared pool for the screener's batched `.info` fetches (previously a fresh
+# 6-worker pool per 40-ticker batch, uncounted against any budget).
+_screener_batch_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="yf-screener")
+
 
 async def _run(fn, *args, **kwargs):
     loop = asyncio.get_running_loop()
@@ -730,24 +743,24 @@ _SECTOR_ETFS = [
     ("XLC",  "Comm. Services"),
 ]
 
-def _download_chunked(tickers, period: str, chunk_size: int = 40, max_concurrent: int = 5):
+def _download_chunked(tickers, period: str, chunk_size: int = 40):
     """yf.download's wall-clock time scales with ticker count even with
     threads=True (Yahoo's batch endpoint has practical limits). Splitting
     into chunks and downloading them concurrently cuts total time roughly
     by a factor of len(chunks) — but firing every chunk at once trips
     Yahoo's rate limiter, which silently returns NaN columns instead of
-    erroring (so failures are invisible unless you count them). Capping
-    concurrency keeps the speedup without the silent data loss."""
+    erroring (so failures are invisible unless you count them). Chunks run
+    on the shared `_download_pool`, so overlapping callers queue behind the
+    same 5 slots rather than each adding 5 more Yahoo connections."""
     import pandas as pd
     chunks = [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
     if len(chunks) == 1:
         return yf.download(tickers, period=period, interval="1d", auto_adjust=True, progress=False, threads=True)
 
-    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
-        frames = list(pool.map(
-            lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
-            chunks,
-        ))
+    frames = list(_download_pool.map(
+        lambda c: yf.download(c, period=period, interval="1d", auto_adjust=True, progress=False, threads=True),
+        chunks,
+    ))
     return pd.concat(frames, axis=1)
 
 
@@ -1316,12 +1329,11 @@ def _fetch_screener_inner() -> list[dict]:
     batch_size = 40
     for i in range(0, len(tickers), batch_size):
         batch = tickers[i:i + batch_size]
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            futs = {pool.submit(fetch_info, t): t for t in batch}
-            for fut in as_completed(futs):
-                r = fut.result()
-                if r:
-                    results.append(r)
+        futs = {_screener_batch_pool.submit(fetch_info, t): t for t in batch}
+        for fut in as_completed(futs):
+            r = fut.result()
+            if r:
+                results.append(r)
         if i + batch_size < len(tickers):
             time.sleep(1.0)
 
@@ -1817,13 +1829,12 @@ async def stream_screener():
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
     def _process_batches():
-        # Limit in-flight .info calls per batch — _pool has 16 workers but
-        # we throttle to 6 to avoid Yahoo's "Invalid Crumb" rate limit.
-        from concurrent.futures import ThreadPoolExecutor as _TPE
+        # Limit in-flight .info calls per batch — the shared 6-worker
+        # `_screener_batch_pool` throttles below Yahoo's "Invalid Crumb"
+        # rate limit and is the same budget _fetch_screener_inner uses.
         for i in range(0, len(tickers), batch_size):
             batch = tickers[i:i + batch_size]
-            with _TPE(max_workers=6) as p:
-                list(p.map(_fetch_one, batch))
+            list(_screener_batch_pool.map(_fetch_one, batch))
             if i + batch_size < len(tickers):
                 time.sleep(1.0)
 

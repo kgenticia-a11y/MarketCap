@@ -211,6 +211,9 @@ async def lifespan(app: FastAPI):
     # past the grace period and trigger a SIGKILL anyway.
     market_data._pool.shutdown(wait=False)
     market_data._backfill_pool.shutdown(wait=False)
+    market_data._info_pool.shutdown(wait=False)
+    market_data._download_pool.shutdown(wait=False)
+    market_data._screener_batch_pool.shutdown(wait=False)
 
     logger.info("MarketCap API shutting down")
 
