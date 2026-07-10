@@ -19,7 +19,7 @@ import httpx
 import yfinance as yf
 
 from app.config import settings
-from app.services.nyse_universe import NYSE_EXPANSION
+from app.services.nyse_universe import NYSE_EXPANSION, assert_unique_universe
 
 logger = logging.getLogger(__name__)
 
@@ -545,23 +545,16 @@ _UNIVERSE = [
     "TSM", "ASML", "SAP", "TM", "SONY", "NVO", "BABA", "JD", "PDD", "MELI",
     "SE", "INFY", "WIT", "HDB", "IBN",
 ]
-# Real runtime check (asserts are stripped under `python -O`, and this
-# invariant is the whole point of the unification — it must survive prod).
+# Real runtime check (see assert_unique_universe — it must survive prod).
 # Freeze as a tuple so aliasing (_SCREENER_UNIVERSE = _UNIVERSE below) can't
 # accidentally mutate the canonical list via the alias.
-if len(_UNIVERSE) != 599 or len(set(_UNIVERSE)) != 599:
-    raise RuntimeError(
-        f"_UNIVERSE core must be exactly 599 unique stocks; "
-        f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
-    )
+assert_unique_universe("_UNIVERSE core", _UNIVERSE, expected=599)
 # Append the NYSE expansion (1,500 NYSE-only common stocks, largest market
-# cap first — see nyse_universe.py for the selection rules).
+# cap first — see nyse_universe.py for the selection rules). The combined
+# size is derived from the two pinned lists, so only a cross-list duplicate
+# can fail here — and the error names it.
 _UNIVERSE = _UNIVERSE + list(NYSE_EXPANSION)
-if len(_UNIVERSE) != 2099 or len(set(_UNIVERSE)) != 2099:
-    raise RuntimeError(
-        f"core + NYSE expansion must be exactly 2099 unique stocks; "
-        f"got {len(_UNIVERSE)} entries / {len(set(_UNIVERSE))} unique"
-    )
+assert_unique_universe("_UNIVERSE (core + NYSE expansion)", _UNIVERSE)
 _UNIVERSE = tuple(_UNIVERSE)
 
 

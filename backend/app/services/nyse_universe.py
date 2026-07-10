@@ -17,6 +17,28 @@ through yfinance. NYSE-only by construction — do not add NASDAQ/AMEX symbols
 here; those belong in the core universe list.
 """
 
+def assert_unique_universe(name: str, tickers, expected: int | None = None) -> None:
+    """Runtime invariant shared by every universe list (asserts are stripped
+    under `python -O`, and a wrong list would silently skew breadth,
+    gainers/losers, and the screener — so this must survive prod).
+
+    Names the offending tickers on failure instead of only aggregate counts,
+    so a bad edit is a one-line fix rather than a hand-diff of 2,000+ lines.
+    Pass `expected` to also pin the count of a hand-maintained list; omit it
+    for derived/combined lists so their size never needs a third literal
+    kept in lockstep.
+    """
+    from collections import Counter
+
+    dupes = sorted(t for t, n in Counter(tickers).items() if n > 1)
+    if dupes:
+        raise RuntimeError(f"{name} contains duplicate tickers: {', '.join(dupes[:10])}")
+    if expected is not None and len(tickers) != expected:
+        raise RuntimeError(
+            f"{name} must contain exactly {expected} tickers; got {len(tickers)}"
+        )
+
+
 NYSE_EXPANSION: tuple[str, ...] = (
     "BRK-A", "AZN", "HSBC", "NVS", "GEV", "RY", "MUFG", "SHEL", "SAN", "BHP",
     "TD", "TTE", "SMFG", "UBS", "BBVA", "BUD", "SCCO", "CB", "PGR", "UL",
@@ -170,11 +192,4 @@ NYSE_EXPANSION: tuple[str, ...] = (
     "EQS", "MOGU", "SLAI", "MVO", "SOS", "MTR", "BF-B", "BF-A", "HEI-A", "CRD-A",
 )
 
-# Same style of runtime invariant as _UNIVERSE in market_data.py: asserts are
-# stripped under `python -O`, and a wrong count here would silently skew
-# breadth, gainers/losers, and the screener.
-if len(NYSE_EXPANSION) != 1500 or len(set(NYSE_EXPANSION)) != 1500:
-    raise RuntimeError(
-        f"NYSE_EXPANSION must be exactly 1500 unique stocks; "
-        f"got {len(NYSE_EXPANSION)} entries / {len(set(NYSE_EXPANSION))} unique"
-    )
+assert_unique_universe("NYSE_EXPANSION", NYSE_EXPANSION, expected=1500)
