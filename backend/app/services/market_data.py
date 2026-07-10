@@ -1096,19 +1096,17 @@ def _fetch_market_update() -> dict:
     }
 
 
-async def get_market_update() -> dict:
-    """Return the market-update payload, refreshing once per _UPDATE_TTL.
+async def _refresh_market_update_blocking() -> dict:
+    """Refresh the market-update cache if stale, blocking until done.
 
-    Single-flight: when the cache is cold and stale, exactly one fetch runs
-    even if many coroutines call concurrently. Without this lock each cold
-    caller fired its own full-universe batch + backfill in parallel, which
-    deepened Yahoo's throttle (the very condition that triggered backfill
-    in the first place) and ballooned cold-load latency proportionally."""
+    Single-flight: exactly one fetch runs even if many coroutines call
+    concurrently — without the lock each cold caller fired its own
+    full-universe batch + backfill in parallel, which deepened Yahoo's
+    throttle and ballooned cold-load latency. Used by the background
+    refresh loop (so failures propagate into its backoff) and by the
+    truly-cold path in get_market_update.
+    """
     global _update_cache
-    now = time.time()
-    if _update_cache is not None and now - _update_cache[1] < _UPDATE_TTL:
-        return _update_cache[0]
-
     async with _update_lock:
         # Re-check after acquiring — another coroutine may have refreshed
         # while we were queued behind it.
@@ -1118,6 +1116,32 @@ async def get_market_update() -> dict:
         result = await _run(_fetch_market_update)
         _update_cache = (result, time.time())
         return result
+
+
+async def get_market_update() -> dict:
+    """Return the market-update payload.
+
+    Stale-while-revalidate: a full-universe refresh takes ~60s at 2,099
+    tickers, so the cache routinely outlives its TTL for a stretch of every
+    refresh-loop cycle. Blocking a user request on that refresh made the
+    dashboard's market-update section hang past the frontend's patience.
+    A stale payload is served immediately and one background refresh
+    (single-flighted by _update_lock) brings it current; only a completely
+    cold cache — the first request after boot, before the warm-up loop
+    fills it — blocks on the fetch.
+    """
+    if _update_cache is not None:
+        if time.time() - _update_cache[1] < _UPDATE_TTL:
+            return _update_cache[0]
+        if not _update_lock.locked():
+            async def _bg() -> None:
+                try:
+                    await _refresh_market_update_blocking()
+                except Exception as exc:
+                    logger.debug("SWR market-update refresh failed: %s", exc)
+            asyncio.create_task(_bg())
+        return _update_cache[0]
+    return await _refresh_market_update_blocking()
 
 
 # ── Mutual Funds / ETF Screener ────────────────────────────────────────────
@@ -1473,7 +1497,10 @@ async def get_screener() -> list[dict]:
 # Refresh slightly ahead of the TTL so the cache never goes stale under
 # normal conditions. Floors keep the refresher from hammering Yahoo if
 # someone sets the TTL to a tiny value.
-_UPDATE_REFRESH_INTERVAL   = max(60,  _UPDATE_TTL   - 30)
+# The update refresh itself takes ~60s at 2,099 tickers and the loop sleeps
+# AFTER the fetch completes, so the margin must absorb the fetch duration or
+# the cache spends part of every cycle past its TTL.
+_UPDATE_REFRESH_INTERVAL   = max(60,  _UPDATE_TTL   - 90)
 _SCREENER_REFRESH_INTERVAL = max(300, _SCREENER_TTL - 60)
 
 
@@ -1530,8 +1557,12 @@ async def _refresh_loop(
 
 async def refresh_market_update_loop() -> None:
     """Keep the /market/update cache continuously warm so user requests
-    always hit memory instead of yfinance."""
-    await _refresh_loop("market-update", _UPDATE_REFRESH_INTERVAL, get_market_update)
+    always hit memory instead of yfinance. Uses the blocking refresher so
+    a failed fetch raises into _refresh_loop's backoff instead of being
+    swallowed by get_market_update's serve-stale path."""
+    await _refresh_loop(
+        "market-update", _UPDATE_REFRESH_INTERVAL, _refresh_market_update_blocking
+    )
 
 
 async def refresh_screener_loop() -> None:

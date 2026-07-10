@@ -128,6 +128,11 @@ class PriceAlert(Base):
     target_price = Column(Float,   nullable=False)
     condition    = Column(String,  nullable=False)   # "above" | "below"
     created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # Set by the server-side alert evaluator the first time the condition is
+    # met; null = still armed. The frontend renders this and the evaluator
+    # filters on it, but the column was never added to the model, so every
+    # evaluation pass crashed with an AttributeError.
+    triggered_at = Column(DateTime, nullable=True)
 
     owner = relationship("User", back_populates="alerts")
 

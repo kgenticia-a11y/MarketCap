@@ -177,5 +177,6 @@ class PriceAlertOut(BaseModel):
     target_price: float
     condition:    str
     created_at:   datetime
+    triggered_at: datetime | None = None
 
     model_config = {"from_attributes": True}

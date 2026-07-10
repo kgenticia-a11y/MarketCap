@@ -70,6 +70,17 @@ def run_lightweight_migrations() -> None:
                     logger.info("[migration] %s", stmt)
                     conn.execute(text(stmt))
 
+    # Server-side alert evaluation: triggered_at on price_alerts. The
+    # evaluator and the frontend both used this column, but it was never
+    # added to the model — every evaluation pass crashed until now.
+    if inspector.has_table("price_alerts"):
+        cols = {c["name"] for c in inspector.get_columns("price_alerts")}
+        if "triggered_at" not in cols:
+            stmt = "ALTER TABLE price_alerts ADD COLUMN triggered_at TIMESTAMP"
+            with engine.begin() as conn:
+                logger.info("[migration] %s", stmt)
+                conn.execute(text(stmt))
+
 
 def get_db():
     """Yield a DB session and ensure rollback on any unhandled exception."""
