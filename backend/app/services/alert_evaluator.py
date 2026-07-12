@@ -51,6 +51,7 @@ async def evaluate_alerts_once() -> dict:
             by_ticker.setdefault(alert.ticker, []).append(alert)
 
         triggered_count = 0
+        stale_skipped = 0
         now = datetime.now(timezone.utc)
 
         for ticker, alerts in by_ticker.items():
@@ -66,6 +67,10 @@ async def evaluate_alerts_once() -> dict:
             # firing now would mark the alert as triggered without any new
             # market activity since the user created it.
             if quote.get("stale"):
+                # Counted separately so operators can tell "alerts skipped on
+                # stale prints" (thin tickers can stay stale for hours) apart
+                # from fetch failures — previously both were invisible.
+                stale_skipped += len(alerts)
                 continue
 
             for alert in alerts:
@@ -88,7 +93,7 @@ async def evaluate_alerts_once() -> dict:
         if triggered_count:
             db.commit()
 
-        return {"checked": len(active), "triggered": triggered_count}
+        return {"checked": len(active), "triggered": triggered_count, "stale_skipped": stale_skipped}
 
     except Exception as exc:
         logger.error("Alert evaluation pass failed: %s", exc)

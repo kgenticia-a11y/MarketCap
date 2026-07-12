@@ -25,6 +25,7 @@ from datetime import date
 from sqlalchemy.exc import IntegrityError
 
 from app.database import SessionLocal
+from app.market_time import market_date
 from app.models import Portfolio, PortfolioSnapshot
 from app.services import market_data
 
@@ -36,7 +37,7 @@ SNAPSHOT_CHECK_INTERVAL_SECONDS = 3_600  # Run once per hour
 async def snapshot_all_portfolios() -> dict:
     """Write today's snapshot for every active portfolio that doesn't have one yet."""
     db = SessionLocal()
-    today = date.today().isoformat()
+    today = market_date().isoformat()
     written = 0
     skipped = 0
     errors = 0
