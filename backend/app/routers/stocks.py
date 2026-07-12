@@ -50,6 +50,30 @@ async def search(q: str = Query(..., min_length=1, max_length=50)):
         raise HTTPException(502, "Market data unavailable.")
 
 
+@router.get("/quotes")
+async def quotes_batch(tickers: str = Query(..., min_length=1, max_length=1200)):
+    """Batched quotes: one request for a whole portfolio or tab bar instead
+    of one request per ticker (the per-row pattern fired 40+ calls/min from
+    a single portfolio page). Comma-separated, deduped, capped at 100;
+    invalid or failed symbols are omitted rather than failing the batch."""
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for raw in tickers.split(","):
+        t = raw.strip().upper()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        symbols.append(t)
+        if len(symbols) >= 100:
+            break
+
+    async def _one(sym: str):
+        return await market_data.get_quote(_validate_ticker(sym))
+
+    results = await asyncio.gather(*(_one(s) for s in symbols), return_exceptions=True)
+    return {"results": {s: r for s, r in zip(symbols, results) if not isinstance(r, BaseException)}}
+
+
 @router.get("/quote/{ticker}")
 async def quote(ticker: str):
     t = _validate_ticker(ticker)

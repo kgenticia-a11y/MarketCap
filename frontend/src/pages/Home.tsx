@@ -54,7 +54,9 @@ export default function Home() {
   const gainers: StockSnap[] = overview?.gainers ?? [];
   const losers: StockSnap[] = overview?.losers ?? [];
 
-  if (ovError && !ovLoading) {
+  // Only take over the page when there is genuinely nothing to show — a
+  // failed BACKGROUND refetch used to nuke a perfectly good dashboard.
+  if (ovError && !ovLoading && !overview) {
     return (
       <ErrorBoundary label="Dashboard failed to load">
         <div className="p-6 flex flex-col items-center justify-center h-64 gap-3">

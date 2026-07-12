@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -278,6 +279,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Admin-Token"],
 )
+
+# Compress JSON/NDJSON responses — the 2,099-row screener stream and the
+# market-update payload shrink ~5-10x over the wire, which is most of the
+# perceived data-load time on slower connections. (Starlette's GZip
+# middleware compresses streaming responses chunk-wise, so the screener's
+# progressive rendering is preserved.)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(SecurityHeadersMiddleware)
 

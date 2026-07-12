@@ -445,6 +445,7 @@ export default function Screener() {
   const [isLoading, setIsLoading] = useState(() => screenerCache.rows.length === 0);
   const [isError, setIsError]     = useState(false);
   const [retryKey, setRetryKey]   = useState(0);
+  const [errorMsg, setErrorMsg]   = useState("");
   const pendingRef                = useRef<ScreenerRow[]>([]);
   const timerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -522,6 +523,10 @@ export default function Screener() {
         try {
           const res = await fetch(`${API_URL}/stocks/screener`, { signal: controller.signal });
           clearTimeout(timeoutId);
+          if (res.status === 429) {
+            const ra = parseInt(res.headers.get("retry-after") ?? "", 10);
+            throw new Error(`rate-limited:${Number.isNaN(ra) ? 60 : ra}`);
+          }
           if (!res.ok || !res.body) throw new Error("stream failed");
           const reader  = res.body.getReader();
           const decoder = new TextDecoder();
@@ -558,8 +563,13 @@ export default function Screener() {
             });
             setIsLoading(false);
           }
-        } catch {
-          if (!cancelled) { setIsError(true); setIsLoading(false); }
+        } catch (e) {
+          if (!cancelled) {
+            const m = /^rate-limited:(\d+)$/.exec((e as Error)?.message ?? "");
+            if (m) setErrorMsg(`Rate limited — retry in ~${m[1]}s.`);
+            setIsError(true);
+            setIsLoading(false);
+          }
         }
       })();
     }
@@ -981,7 +991,7 @@ export default function Screener() {
 
         {isError && (
           <div className="flex flex-col items-center justify-center h-32 gap-3 text-muted text-sm">
-            <span>Failed to load screener data.</span>
+            <span>{errorMsg || "Failed to load screener data."}</span>
             <button onClick={retry}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-hover text-xs text-muted hover:text-white transition-colors">
               <RefreshCw size={12} /> Retry
