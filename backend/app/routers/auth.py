@@ -30,6 +30,9 @@ def register(body: schemas.UserRegister, db: Session = Depends(get_db)):
     # Use a generic message regardless of the failure reason so that an
     # attacker cannot enumerate which addresses are already registered.
     if db.query(models.User).filter(models.User.email == normalised_email).first():
+        # Burn the same bcrypt work as the success path so a duplicate email
+        # isn't detectable by response time.
+        auth.equalize_timing(body.password)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to create account. Please check your details.",
@@ -59,9 +62,14 @@ def login(body: schemas.UserLogin, db: Session = Depends(get_db)):
     """
     normalised_email = body.email.lower().strip()
     user = db.query(models.User).filter(models.User.email == normalised_email).first()
-    if not user or not auth.verify_password(body.password, user.hashed_password):
+    if not user:
+        # Burn the same bcrypt work a real verification costs so an
+        # unregistered email isn't detectable by response time.
+        auth.equalize_timing(body.password)
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return {"access_token": auth.create_access_token(user.id)}
+    if not auth.verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"access_token": auth.create_access_token(user.id, user.token_version or 0)}
 
 
 @router.get("/me", response_model=schemas.UserOut)
@@ -91,6 +99,9 @@ def change_password(
     if not auth.verify_password(body.current_password, current_user.hashed_password):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
     current_user.hashed_password = auth.hash_password(body.new_password)
+    # Invalidate every previously issued token (including any stolen one) —
+    # the client re-authenticates with the new password.
+    current_user.token_version = (current_user.token_version or 0) + 1
     db.commit()
 
 

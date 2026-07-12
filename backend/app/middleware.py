@@ -109,13 +109,24 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         ("GET",   "/auth/data-export",    3, 300, False),
         # Anonymous feedback — stricter window to deter spam.
         ("POST",  "/feedback",            5, 300, False),
+        # ── AI endpoints — every request costs real Claude API money ─────
+        ("POST",  "/ai/chat",            10,  60, False),
+        ("POST",  "/ai/chart-analysis",   6,  60, False),
+        ("POST",  "/ai/earnings-brief",   6,  60, False),
+        ("GET",   "/ai/daily-brief",      6,  60, False),
+        ("POST",  "/portfolio/analyze",   4,  60, False),
         # ── Market-data endpoints (unauthenticated) ──────────────────────
-        # Screener is by far the most expensive: bulk-downloads the full 2,099-stock universe.
-        ("GET",   "/stocks/screener",     2,  60, False),
-        # Market overview + update are also yfinance-heavy.
-        ("GET",   "/stocks/market/",      5,  60, True),
-        # All other /stocks/* (quote, details, chart, income…) — generous but bounded.
-        ("GET",   "/stocks/",            30,  60, True),
+        # Screener streams from an in-memory cache now; the cold refill is
+        # single-flighted server-side, so the limit only needs to stop abuse
+        # (4 absorbs dev StrictMode double-mounts and a quick retry).
+        ("GET",   "/stocks/screener",     4,  60, False),
+        # Overview + update are served from always-warm in-memory caches —
+        # cheap per request. Sized for a dashboard polling both plus a
+        # focus-refetch burst, now that prefix rules share one bucket.
+        ("GET",   "/stocks/market/",     20,  60, True),
+        # All other /stocks/* (quote, details, chart, income…) — generous but
+        # bounded; this is now a real aggregate across all matching paths.
+        ("GET",   "/stocks/",            60,  60, True),
         # Backtest hits yfinance history every call — 1-3s upstream per
         # request. Keep it bounded so a hot-clicking user can't melt the
         # event loop or Yahoo's per-IP budget.
@@ -149,21 +160,27 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         return request.client.host if request.client else "unknown"
 
     def _matching_rule(self, method: str, path: str):
+        """Returns (max_attempts, window, rule_method, rule_path) so callers
+        can key state on the rule itself rather than the request path."""
         for rule in self.rules:
             m, p, max_attempts, window = rule[:4]
             prefix = len(rule) > 4 and rule[4]
             if m == method and (path.startswith(p) if prefix else path == p):
-                return max_attempts, window
+                return max_attempts, window, m, p
         return None
 
     async def dispatch(self, request: Request, call_next):
         rule = self._matching_rule(request.method, request.url.path)
         if not rule:
             return await call_next(request)
-        max_attempts, window_sec = rule
+        max_attempts, window_sec = rule[0], rule[1]
 
         ip      = self._client_ip(request)
-        key     = (ip, request.url.path)
+        # Key on the MATCHED RULE, not the literal path: with per-path keys a
+        # prefix rule like /stocks/ gave every /stocks/quote/{ticker} its own
+        # independent bucket, so the documented aggregate budget never
+        # actually applied.
+        key     = (ip, rule[2], rule[3])
         now     = time.monotonic()
         cutoff  = now - window_sec
         attempts = self._hits[key]
