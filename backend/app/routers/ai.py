@@ -404,11 +404,11 @@ class AnalystReportRequest(BaseModel):
 _DEPTH_CONFIG = {
     "brief": {
         "instruction": "Write 1-2 sentences per section. Be concise — key takeaway only.",
-        "max_tokens": 1200,
+        "max_tokens": 2000,
     },
     "standard": {
         "instruction": "Write 1-2 paragraphs per section with supporting data points.",
-        "max_tokens": 2500,
+        "max_tokens": 7500,
     },
     "deep": {
         "instruction": (
@@ -416,9 +416,15 @@ _DEPTH_CONFIG = {
             "granular segment analysis, scenario modeling, and DCF sensitivity discussion where "
             "applicable. Add sub-sections for competitive landscape and segment breakdown."
         ),
-        "max_tokens": 4000,
+        "max_tokens": 7500,
     },
 }
+
+_DEEP_SECTION_GROUPS = [
+    ["investment_thesis", "rating", "company_overview"],
+    ["financial_analysis", "valuation_assessment", "balance_sheet_health"],
+    ["analyst_consensus", "growth_outlook", "risk_factors", "arr_mrr_note"],
+]
 
 
 def _fmt_num(v, prefix="", suffix="", pct=False):
@@ -488,7 +494,7 @@ Analyst Consensus: {at['recommendation'] or 'N/A'} (score {at['score'] or 'N/A'}
 Price Targets: Low ${at['low'] or 'N/A'}, Mean ${at['mean'] or 'N/A'}, Median ${at['median'] or 'N/A'}, High ${at['high'] or 'N/A'}
 Number of Analysts: {at['num_analysts'] or 'N/A'}
 
-Company Description: {co['description'][:500] if co['description'] else 'N/A'}
+Company Description: {co['description'][:2000] if co['description'] else 'N/A'}
 
 Time span analyzed: {body.timespan}
 Report depth: {body.depth}
@@ -517,17 +523,41 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
         "that is handled separately. Always respond with pure JSON."
     )
 
-    try:
-        text = await claude.ask_claude_text(system, prompt, max_tokens=depth_cfg["max_tokens"])
-    except Exception as exc:
-        _ai_error_to_http(exc)
+    def _parse_ai_json(text: str) -> dict:
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        return json.loads(text)
 
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    try:
-        narrative = json.loads(text)
-    except json.JSONDecodeError:
-        narrative = {"raw": text}
+    if body.depth == "deep":
+        narrative: dict[str, Any] = {}
+        for group in _DEEP_SECTION_GROUPS:
+            keys_json = ", ".join(f'"{k}": "..."' for k in group)
+            chunk_prompt = (
+                f"{prompt}\n\n"
+                f"For this request, generate ONLY these sections: {', '.join(group)}.\n"
+                f"Respond with pure JSON containing exactly these keys:\n{{{keys_json}}}"
+            )
+            try:
+                text = await claude.ask_claude_text(
+                    system, chunk_prompt, max_tokens=depth_cfg["max_tokens"]
+                )
+            except Exception as exc:
+                _ai_error_to_http(exc)
+            try:
+                chunk = _parse_ai_json(text)
+                narrative.update(chunk)
+            except json.JSONDecodeError:
+                for key in group:
+                    narrative.setdefault(key, None)
+    else:
+        try:
+            text = await claude.ask_claude_text(system, prompt, max_tokens=depth_cfg["max_tokens"])
+        except Exception as exc:
+            _ai_error_to_http(exc)
+        try:
+            narrative = _parse_ai_json(text)
+        except json.JSONDecodeError:
+            narrative = {"raw": text}
 
     return {
         **data,
