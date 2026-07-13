@@ -808,6 +808,64 @@ async def get_analyst_report_data(ticker: str, timespan: str) -> dict:
     return await _run(_fetch_analyst_report_data, ticker.upper(), timespan)
 
 
+def _fetch_price_life(ticker: str) -> dict:
+    """Whole-life market data for the document-analysis engine: monthly
+    closes since listing, dividends aggregated per year, split history,
+    and current market cap. Monthly bars keep even 40-year histories to a
+    few hundred points."""
+    t = yf.Ticker(ticker)
+    out: dict = {"bars": [], "dividends_by_year": [], "splits": [], "market_cap": None}
+
+    try:
+        hist = t.history(period="max", interval="1mo", auto_adjust=False)
+        if hist is not None and not hist.empty:
+            closes = hist["Close"].dropna()
+            out["bars"] = [
+                {"d": idx.strftime("%Y-%m-%d"), "t": int(idx.timestamp() * 1000),
+                 "c": round(float(v), 2)}
+                for idx, v in closes.items()
+            ]
+    except Exception:
+        logger.warning("price-life: history failed for %s", ticker)
+
+    try:
+        divs = t.dividends
+        if divs is not None and not divs.empty:
+            per_year: dict[int, float] = {}
+            for idx, v in divs.items():
+                per_year[idx.year] = per_year.get(idx.year, 0.0) + float(v)
+            out["dividends_by_year"] = [
+                {"year": y, "value": round(per_year[y], 4)} for y in sorted(per_year)
+            ]
+    except Exception:
+        logger.warning("price-life: dividends failed for %s", ticker)
+
+    try:
+        splits = t.splits
+        if splits is not None and not splits.empty:
+            out["splits"] = [
+                {"date": idx.strftime("%Y-%m-%d"),
+                 "ratio": f"{v:g}:1" if v == int(v) else f"{v:g}-for-1"}
+                for idx, v in splits.items()
+            ]
+    except Exception:
+        logger.warning("price-life: splits failed for %s", ticker)
+
+    try:
+        fi = t.fast_info
+        mc = fi.market_cap
+        if mc:
+            out["market_cap"] = float(mc)
+    except Exception:
+        pass
+
+    return out
+
+
+async def get_price_life(ticker: str) -> dict:
+    return await _run(_fetch_price_life, ticker.upper())
+
+
 # ── Market Update ──────────────────────────────────────────────────────────
 
 _SECTOR_ETFS = [
