@@ -115,6 +115,8 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         ("POST",  "/ai/earnings-brief",   6,  60, False),
         ("GET",   "/ai/daily-brief",      6,  60, False),
         ("POST",  "/ai/analyst-report",   4,  60, False),
+        # Document-analysis engine: each request pulls multi-MB EDGAR payloads.
+        ("GET",   "/analysis/company/",   4,  60, True),
         ("POST",  "/portfolio/analyze",   4,  60, False),
         # ── Market-data endpoints (unauthenticated) ──────────────────────
         # Screener streams from an in-memory cache now; the cold refill is

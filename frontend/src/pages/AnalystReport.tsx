@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { searchStocks } from "../api/stocks";
 import { getAnalystReport } from "../api/ai";
+import { getCompanyLifeAnalysis } from "../api/analysis";
+import CompanyLifeReport from "../components/CompanyLifeReport";
 import {
   Search, X, FileText, Download, TrendingUp, TrendingDown,
   Building2, DollarSign, BarChart3, ShieldCheck, Users, Rocket, AlertTriangle, Server,
@@ -149,8 +151,22 @@ function PriceTargetBar({ low, mean, high, current }: { low: number; mean: numbe
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+const MODES = [
+  {
+    key: "docs",
+    label: "Document Analysis",
+    desc: "Autonomous engine reads the company's entire SEC filing history and computes the report — no AI model involved",
+  },
+  {
+    key: "ai",
+    label: "AI Narrative Report",
+    desc: "Institutional-format report with narrative written by Meta Llama",
+  },
+] as const;
+
 export default function AnalystReport() {
   const [selected, setSelected] = useState<SearchResult | null>(null);
+  const [mode, setMode] = useState<"docs" | "ai">("docs");
   const [timespan, setTimespan] = useState<string>("1Y");
   const [depth, setDepth] = useState<string>("standard");
   const reportRef = useRef<HTMLDivElement>(null);
@@ -160,11 +176,22 @@ export default function AnalystReport() {
     onError: () => toast.error("Failed to generate report. Please try again."),
   });
 
-  const report: any = mutation.data;
-  const loading = mutation.isPending;
+  const docsMutation = useMutation({
+    mutationFn: () => getCompanyLifeAnalysis(selected!.ticker),
+    onError: (err: any) => {
+      const detail = err?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Document analysis failed. Please try again.");
+    },
+  });
+
+  const report: any = mode === "ai" ? mutation.data : undefined;
+  const docsReport: any = mode === "docs" ? docsMutation.data : undefined;
+  const loading = mode === "ai" ? mutation.isPending : docsMutation.isPending;
 
   const generate = () => {
-    if (selected) mutation.mutate();
+    if (!selected) return;
+    if (mode === "ai") mutation.mutate();
+    else docsMutation.mutate();
   };
 
   const exportPDF = async () => {
@@ -200,12 +227,82 @@ export default function AnalystReport() {
   };
 
   const exportDOCX = async () => {
-    if (!report) return;
+    if (!report && !docsReport) return;
     toast.info("Generating DOCX...");
     try {
       const docx = await import("docx");
       const { saveAs } = await import("file-saver");
       const { Document, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } = docx;
+
+      // ── Document-analysis mode: build from rule-generated insights ──
+      if (mode === "docs" && docsReport) {
+        const ins = docsReport.insights || {};
+        const docSections: { title: string; lines: string[] }[] = [
+          { title: "Company Timeline", lines: ins.timeline || [] },
+          { title: "Executive Synthesis", lines: ins.summary || [] },
+          { title: "Revenue — The Whole Life", lines: ins.revenue || [] },
+          { title: "Profitability Evolution", lines: ins.profitability || [] },
+          { title: "Balance Sheet Evolution", lines: ins.balance_sheet || [] },
+          { title: "Cash Flow Quality", lines: ins.cash_flow || [] },
+          { title: "Shareholder Returns", lines: ins.shareholder_returns || [] },
+          { title: "Financial Health", lines: ins.health || [] },
+        ];
+
+        const kids: any[] = [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+            children: [new TextRun({ text: `${docsReport.profile?.name || selected?.ticker} (${docsReport.ticker})`, bold: true, size: 36 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+            children: [new TextRun({ text: `Company Life Analysis — Document-Driven (No AI) | Generated ${new Date(docsReport.generated_at).toLocaleDateString()}`, size: 18, color: "666666" })],
+          }),
+        ];
+        for (const sec of docSections) {
+          if (!sec.lines.length) continue;
+          kids.push(
+            new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 100 }, children: [new TextRun({ text: sec.title, bold: true })] }),
+            ...sec.lines.map((line) => new Paragraph({ spacing: { after: 120 }, bullet: { level: 0 }, children: [new TextRun({ text: line, size: 22 })] })),
+          );
+        }
+        // Ratio history table
+        if (docsReport.ratios_by_year?.length) {
+          const header = ["FY", "Gross %", "Oper. %", "Net %", "ROE %", "ROA %", "Liab/Eq", "Curr.", "OCF/NI"];
+          const keys = ["gross_margin", "operating_margin", "net_margin", "roe", "roa", "debt_to_equity", "current_ratio", "ocf_to_ni"];
+          kids.push(
+            new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 100 }, children: [new TextRun({ text: "Ratio History — Every Filed Year", bold: true })] }),
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: [
+                new TableRow({
+                  children: header.map((h) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 18 })] })] })),
+                }),
+                ...docsReport.ratios_by_year.map((r: any) =>
+                  new TableRow({
+                    children: [
+                      new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(r.year), size: 18 })] })] }),
+                      ...keys.map((k) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r[k] != null ? String(r[k]) : "—", size: 18 })] })] })),
+                    ],
+                  })
+                ),
+              ],
+            }),
+          );
+        }
+        kids.push(
+          new Paragraph({ spacing: { before: 400 }, children: [new TextRun({ text: docsReport.methodology || "", italics: true, size: 18, color: "999999" })] }),
+          new Paragraph({ children: [new TextRun({ text: `Sources: ${(docsReport.sources || []).join(", ")}`, size: 18, color: "999999" })] }),
+        );
+
+        const docsDoc = new Document({ sections: [{ children: kids }] });
+        const docsBlob = await docx.Packer.toBlob(docsDoc);
+        const d = new Date().toISOString().slice(0, 10);
+        saveAs(docsBlob, `${docsReport.ticker}_Company_Life_Analysis_${d}.docx`);
+        toast.success("DOCX downloaded!");
+        return;
+      }
 
       const n = report.narrative || {};
       const sections: { title: string; text: string }[] = [
@@ -317,6 +414,28 @@ export default function AnalystReport() {
     <div className="space-y-6">
       {/* Input bar */}
       <div className="bg-surface rounded-xl border border-border p-5 space-y-4">
+        {/* Engine selector */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Analysis Engine</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {MODES.map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setMode(m.key)}
+                className={clsx(
+                  "text-left p-3 rounded-lg border transition-all",
+                  mode === m.key
+                    ? "border-accent bg-accent/10"
+                    : "border-border bg-surface hover:border-muted"
+                )}
+              >
+                <p className="text-sm font-semibold text-white">{m.label}</p>
+                <p className="text-xs text-muted mt-0.5">{m.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Company</p>
@@ -326,23 +445,25 @@ export default function AnalystReport() {
             )}
           </div>
 
-          <div>
-            <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Timespan</p>
-            <div className="flex gap-1">
-              {TIMESPANS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTimespan(t)}
-                  className={clsx(
-                    "px-3 py-2 rounded-lg text-xs font-medium transition-colors",
-                    timespan === t ? "bg-accent text-white" : "bg-surface-hover text-muted hover:text-white"
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
+          {mode === "ai" && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Timespan</p>
+              <div className="flex gap-1">
+                {TIMESPANS.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTimespan(t)}
+                    className={clsx(
+                      "px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                      timespan === t ? "bg-accent text-white" : "bg-surface-hover text-muted hover:text-white"
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <button
             onClick={generate}
@@ -354,32 +475,42 @@ export default function AnalystReport() {
                 : "bg-surface-hover text-muted cursor-not-allowed"
             )}
           >
-            {loading ? "Generating..." : "Generate Report"}
+            {loading ? "Generating..." : mode === "docs" ? "Analyze Filings" : "Generate Report"}
           </button>
         </div>
 
-        {/* Depth selector */}
-        <div>
-          <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Report Depth</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {DEPTHS.map((d) => (
-              <button
-                key={d.key}
-                onClick={() => setDepth(d.key)}
-                className={clsx(
-                  "text-left p-3 rounded-lg border transition-all",
-                  depth === d.key
-                    ? "border-accent bg-accent/10"
-                    : "border-border bg-surface hover:border-muted"
-                )}
-              >
-                <p className="text-sm font-semibold text-white">{d.label}</p>
-                <p className="text-[10px] text-accent font-medium">{d.pages}</p>
-                <p className="text-xs text-muted mt-0.5">{d.desc}</p>
-              </button>
-            ))}
+        {mode === "docs" && (
+          <p className="text-xs text-muted">
+            Pulls every annual report the company has filed with the SEC, reads the full financial
+            history, and computes growth phases, health scores, and written findings covering the
+            company's entire life. Deterministic and auditable — no AI model involved.
+          </p>
+        )}
+
+        {/* Depth selector — AI mode only */}
+        {mode === "ai" && (
+          <div>
+            <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Report Depth</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {DEPTHS.map((d) => (
+                <button
+                  key={d.key}
+                  onClick={() => setDepth(d.key)}
+                  className={clsx(
+                    "text-left p-3 rounded-lg border transition-all",
+                    depth === d.key
+                      ? "border-accent bg-accent/10"
+                      : "border-border bg-surface hover:border-muted"
+                  )}
+                >
+                  <p className="text-sm font-semibold text-white">{d.label}</p>
+                  <p className="text-[10px] text-accent font-medium">{d.pages}</p>
+                  <p className="text-xs text-muted mt-0.5">{d.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Loading state */}
@@ -387,8 +518,29 @@ export default function AnalystReport() {
         <div className="bg-surface rounded-xl border border-border p-10 text-center space-y-3">
           <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm text-muted">Analyzing {selected?.ticker}...</p>
-          <p className="text-xs text-muted/60">Fetching market data, financials, and generating AI narrative</p>
+          <p className="text-xs text-muted/60">
+            {mode === "docs"
+              ? "Pulling SEC filings, reading the full financial history, computing analysis"
+              : "Fetching market data, financials, and generating AI narrative"}
+          </p>
         </div>
+      )}
+
+      {/* Document-analysis report */}
+      {docsReport && !loading && mode === "docs" && (
+        <>
+          <div className="flex gap-2">
+            <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-lg text-xs font-medium text-muted hover:text-white hover:border-accent transition-all">
+              <Download size={14} /> Export PDF
+            </button>
+            <button onClick={exportDOCX} className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-lg text-xs font-medium text-muted hover:text-white hover:border-accent transition-all">
+              <FileText size={14} /> Export DOCX
+            </button>
+          </div>
+          <div ref={reportRef}>
+            <CompanyLifeReport report={docsReport} />
+          </div>
+        </>
       )}
 
       {/* Report */}
