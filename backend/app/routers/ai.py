@@ -389,3 +389,151 @@ User is currently viewing: {body.current_page or 'unknown page'}"""
         _ai_error_to_http(exc)
 
     return {"reply": reply}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 4.5 — Analyst Report
+# ─────────────────────────────────────────────────────────────────────────
+
+class AnalystReportRequest(BaseModel):
+    ticker: str = Field(..., max_length=10, pattern=r"^[A-Za-z0-9.\-]{1,10}$")
+    timespan: str = Field(default="1Y", pattern=r"^(1M|6M|1Y|5Y)$")
+    depth: str = Field(default="standard", pattern=r"^(brief|standard|deep)$")
+
+
+_DEPTH_CONFIG = {
+    "brief": {
+        "instruction": "Write 1-2 sentences per section. Be concise — key takeaway only.",
+        "max_tokens": 1200,
+    },
+    "standard": {
+        "instruction": "Write 1-2 paragraphs per section with supporting data points.",
+        "max_tokens": 2500,
+    },
+    "deep": {
+        "instruction": (
+            "Write 3-5 paragraphs per section. Include peer comparisons, historical context, "
+            "granular segment analysis, scenario modeling, and DCF sensitivity discussion where "
+            "applicable. Add sub-sections for competitive landscape and segment breakdown."
+        ),
+        "max_tokens": 4000,
+    },
+}
+
+
+def _fmt_num(v, prefix="", suffix="", pct=False):
+    if v is None:
+        return "N/A"
+    if pct:
+        return f"{v * 100:.1f}%"
+    if abs(v) >= 1e12:
+        return f"{prefix}{v / 1e12:.2f}T{suffix}"
+    if abs(v) >= 1e9:
+        return f"{prefix}{v / 1e9:.2f}B{suffix}"
+    if abs(v) >= 1e6:
+        return f"{prefix}{v / 1e6:.1f}M{suffix}"
+    return f"{prefix}{v:,.2f}{suffix}"
+
+
+@router.post("/analyst-report")
+async def analyst_report(
+    body: AnalystReportRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ticker = body.ticker.upper().strip()
+    data = await market_data.get_analyst_report_data(ticker, body.timespan)
+
+    co = data["company"]
+    q = data["quote"]
+    m = data["margins"]
+    v = data["valuation"]
+    g = data["growth"]
+    h = data["health"]
+    at = data["analyst_targets"]
+
+    depth_cfg = _DEPTH_CONFIG[body.depth]
+
+    revenue_summary = ", ".join(
+        f"{r['year']}: {_fmt_num(r['value'], prefix='$')}"
+        for r in data["financials"]["annual_revenue"]
+    ) or "N/A"
+    net_income_summary = ", ".join(
+        f"{r['year']}: {_fmt_num(r['value'], prefix='$')}"
+        for r in data["financials"]["annual_net_income"]
+    ) or "N/A"
+
+    prompt = f"""Company: {co['name']} ({ticker})
+Sector: {co['sector']} | Industry: {co['industry']}
+Employees: {co['employees'] or 'N/A'}
+
+Current Price: ${q['price']} ({'+' if q['change_pct'] >= 0 else ''}{q['change_pct']}% today)
+Market Cap: {_fmt_num(co['market_cap'], prefix='$')}
+52-Week Range: ${at.get('low') or q.get('week_52_low') or 'N/A'} – ${at.get('high') or q.get('week_52_high') or 'N/A'}
+
+Margins: Gross {_fmt_num(m['gross'], pct=True)}, Operating {_fmt_num(m['operating'], pct=True)}, Net {_fmt_num(m['profit'], pct=True)}, EBITDA {_fmt_num(m['ebitda'], pct=True)}
+
+Annual Revenue (last 4 years): {revenue_summary}
+Annual Net Income (last 4 years): {net_income_summary}
+
+Growth: Revenue {_fmt_num(g['revenue_growth'], pct=True)}, Earnings {_fmt_num(g['earnings_growth'], pct=True)}
+
+Valuation: P/E {v['pe'] or 'N/A'}, Forward P/E {v['forward_pe'] or 'N/A'}, P/S {v['ps'] or 'N/A'}, P/B {v['pb'] or 'N/A'}, EV/Revenue {v['ev_to_revenue'] or 'N/A'}, EV/EBITDA {v['ev_to_ebitda'] or 'N/A'}
+Enterprise Value: {_fmt_num(v['enterprise_value'], prefix='$')}
+
+Balance Sheet: Debt/Equity {h['debt_to_equity'] or 'N/A'}, Current Ratio {h['current_ratio'] or 'N/A'}, ROE {_fmt_num(h['roe'], pct=True)}, ROA {_fmt_num(h['roa'], pct=True)}
+Free Cash Flow: {_fmt_num(h['fcf'], prefix='$')}
+Total Debt: {_fmt_num(h['total_debt'], prefix='$')}
+
+Analyst Consensus: {at['recommendation'] or 'N/A'} (score {at['score'] or 'N/A'}/5)
+Price Targets: Low ${at['low'] or 'N/A'}, Mean ${at['mean'] or 'N/A'}, Median ${at['median'] or 'N/A'}, High ${at['high'] or 'N/A'}
+Number of Analysts: {at['num_analysts'] or 'N/A'}
+
+Company Description: {co['description'][:500] if co['description'] else 'N/A'}
+
+Time span analyzed: {body.timespan}
+Report depth: {body.depth}
+Length instructions: {depth_cfg['instruction']}
+
+Respond in pure JSON (no markdown fences). Return exactly these keys:
+{{
+  "investment_thesis": "...",
+  "rating": "Buy" or "Hold" or "Sell",
+  "company_overview": "...",
+  "financial_analysis": "...",
+  "valuation_assessment": "...",
+  "balance_sheet_health": "...",
+  "analyst_consensus": "...",
+  "growth_outlook": "...",
+  "risk_factors": "...",
+  "arr_mrr_note": "... or null if not a SaaS/subscription business"
+}}"""
+
+    system = (
+        "You are a senior equity research analyst at a top-tier investment bank. "
+        "Produce an institutional-grade analyst report following the CFA Institute standard. "
+        "Use the Pyramid Principle: lead each section with the key conclusion, then supporting evidence. "
+        "Be specific with numbers — reference the actual data provided. "
+        "Never give disclaimers about not being financial advice inside the narrative — "
+        "that is handled separately. Always respond with pure JSON."
+    )
+
+    try:
+        text = await claude.ask_claude_text(system, prompt, max_tokens=depth_cfg["max_tokens"])
+    except Exception as exc:
+        _ai_error_to_http(exc)
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    try:
+        narrative = json.loads(text)
+    except json.JSONDecodeError:
+        narrative = {"raw": text}
+
+    return {
+        **data,
+        "narrative": narrative,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "timespan": body.timespan,
+        "depth": body.depth,
+        "disclaimer": "AI-generated analysis for informational purposes only. Not financial advice.",
+    }

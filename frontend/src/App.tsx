@@ -19,6 +19,7 @@ import Screener from "./pages/Screener";
 import PaperTrading from "./pages/PaperTrading";
 import Alerts from "./pages/Alerts";
 import Terms from "./pages/Terms";
+import AnalystReport from "./pages/AnalystReport";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
 function Private({ title, fullHeight, children }: {
@@ -52,6 +53,7 @@ function AppRoutes() {
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
       <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
       <Route path="/alerts"   element={<Private title="Alerts"><Alerts /></Private>} />
+      <Route path="/analyst-report" element={<Private title="Analyst Report"><AnalystReport /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}
       <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />

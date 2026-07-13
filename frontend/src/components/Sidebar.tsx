@@ -12,6 +12,7 @@ import {
   LogIn,
   ScanSearch,
   Bell,
+  FileText,
   FlaskConical,
   Star,
   Moon,
@@ -41,6 +42,7 @@ const menu = [
 const tools = [
   { label: "Paper Trading",    icon: FlaskConical,     to: "/paper-trading" },
   { label: "Income Estimator", icon: BarChart2,        to: "/income" },
+  { label: "Analyst Report",    icon: FileText,          to: "/analyst-report" },
   { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },
 ];
 
