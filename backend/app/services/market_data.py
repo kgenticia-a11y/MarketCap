@@ -650,6 +650,164 @@ async def get_income_data(ticker: str) -> dict:
     return await _run(_fetch_income_data, ticker.upper())
 
 
+# ── Analyst Report Data ───────────────────────────────────────────────────
+
+_TIMESPAN_TO_PERIOD = {"1M": "1mo", "6M": "6mo", "1Y": "1y", "5Y": "5y"}
+
+
+def _fetch_analyst_report_data(ticker: str, timespan: str) -> dict:
+    t = yf.Ticker(ticker)
+
+    info: dict = {}
+    try:
+        info = _bounded_info(ticker, timeout=5.0)
+    except Exception:
+        logger.warning("analyst-report: .info failed for %s", ticker)
+
+    financials_data: dict = {"annual_revenue": [], "annual_net_income": [],
+                             "annual_gross_profit": [], "annual_operating_income": []}
+    try:
+        fin = t.financials
+        if fin is not None and not fin.empty:
+            for row_name, key in [
+                ("Total Revenue", "annual_revenue"),
+                ("Net Income", "annual_net_income"),
+                ("Gross Profit", "annual_gross_profit"),
+                ("Operating Income", "annual_operating_income"),
+            ]:
+                if row_name in fin.index:
+                    row = fin.loc[row_name].dropna()
+                    financials_data[key] = [
+                        {"year": str(col.year) if hasattr(col, "year") else str(col), "value": float(v)}
+                        for col, v in sorted(row.items(), key=lambda x: str(x[0]))
+                    ][-4:]
+    except Exception:
+        logger.warning("analyst-report: .financials failed for %s", ticker)
+
+    balance: dict = {}
+    try:
+        bs = t.balance_sheet
+        if bs is not None and not bs.empty:
+            latest = bs.iloc[:, 0]
+            for field in ["Total Assets", "Total Liabilities Net Minority Interest",
+                          "Stockholders Equity", "Total Debt",
+                          "Cash And Cash Equivalents"]:
+                if field in latest.index:
+                    balance[field] = float(latest[field]) if latest[field] == latest[field] else None
+    except Exception:
+        logger.warning("analyst-report: .balance_sheet failed for %s", ticker)
+
+    cashflow_data: dict = {}
+    try:
+        cf = t.cashflow
+        if cf is not None and not cf.empty:
+            latest = cf.iloc[:, 0]
+            for field in ["Operating Cash Flow", "Free Cash Flow", "Capital Expenditure"]:
+                if field in latest.index:
+                    cashflow_data[field] = float(latest[field]) if latest[field] == latest[field] else None
+    except Exception:
+        logger.warning("analyst-report: .cashflow failed for %s", ticker)
+
+    price_history: list = []
+    try:
+        period = _TIMESPAN_TO_PERIOD.get(timespan, "1y")
+        hist = t.history(period=period)
+        if hist is not None and not hist.empty:
+            for idx, row in hist.iterrows():
+                price_history.append({
+                    "t": int(idx.timestamp() * 1000),
+                    "o": round(float(row.get("Open", 0)), 2),
+                    "h": round(float(row.get("High", 0)), 2),
+                    "l": round(float(row.get("Low", 0)), 2),
+                    "c": round(float(row.get("Close", 0)), 2),
+                    "v": int(row.get("Volume", 0)),
+                })
+    except Exception:
+        logger.warning("analyst-report: .history failed for %s", ticker)
+
+    recs_history: list = []
+    try:
+        recs = t.recommendations
+        if recs is not None and not recs.empty:
+            for _, row in recs.tail(10).iterrows():
+                recs_history.append({
+                    "date": str(row.name)[:10] if hasattr(row.name, "isoformat") else str(row.name)[:10],
+                    "firm": str(row.get("Firm", "")),
+                    "to_grade": str(row.get("To Grade", "")),
+                    "action": str(row.get("Action", "")),
+                })
+    except Exception:
+        logger.warning("analyst-report: .recommendations failed for %s", ticker)
+
+    g = info.get
+    fi = t.fast_info
+    price = float(fi.last_price) if fi.last_price else g("currentPrice", 0)
+    prev_close = float(fi.previous_close) if fi.previous_close else g("previousClose", 0)
+    change_pct = ((price - prev_close) / prev_close * 100) if prev_close else 0
+
+    return {
+        "company": {
+            "name": g("longName") or g("shortName", ticker),
+            "description": g("longBusinessSummary", ""),
+            "sector": g("sector", ""),
+            "industry": g("industry", ""),
+            "employees": g("fullTimeEmployees"),
+            "market_cap": g("marketCap"),
+        },
+        "quote": {
+            "price": round(price, 2),
+            "change_pct": round(change_pct, 2),
+            "volume": g("volume"),
+            "week_52_high": g("fiftyTwoWeekHigh"),
+            "week_52_low": g("fiftyTwoWeekLow"),
+        },
+        "financials": financials_data,
+        "margins": {
+            "gross": g("grossMargins"),
+            "operating": g("operatingMargins"),
+            "profit": g("profitMargins"),
+            "ebitda": g("ebitdaMargins"),
+        },
+        "valuation": {
+            "pe": g("trailingPE"),
+            "forward_pe": g("forwardPE"),
+            "ps": g("priceToSalesTrailing12Months"),
+            "pb": g("priceToBook"),
+            "ev_to_revenue": g("enterpriseToRevenue"),
+            "ev_to_ebitda": g("enterpriseToEbitda"),
+            "enterprise_value": g("enterpriseValue"),
+        },
+        "growth": {
+            "revenue_growth": g("revenueGrowth"),
+            "earnings_growth": g("earningsGrowth"),
+        },
+        "health": {
+            "debt_to_equity": g("debtToEquity"),
+            "current_ratio": g("currentRatio"),
+            "roe": g("returnOnEquity"),
+            "roa": g("returnOnAssets"),
+            "fcf": g("freeCashflow") or cashflow_data.get("Free Cash Flow"),
+            "operating_cf": g("operatingCashflow") or cashflow_data.get("Operating Cash Flow"),
+            "total_debt": g("totalDebt") or balance.get("Total Debt"),
+        },
+        "analyst_targets": {
+            "high": g("targetHighPrice"),
+            "low": g("targetLowPrice"),
+            "mean": g("targetMeanPrice"),
+            "median": g("targetMedianPrice"),
+            "num_analysts": g("numberOfAnalystOpinions"),
+            "recommendation": g("recommendationKey"),
+            "score": g("recommendationMean"),
+        },
+        "price_history": price_history,
+        "recommendations_history": recs_history,
+    }
+
+
+async def get_analyst_report_data(ticker: str, timespan: str) -> dict:
+    return await _run(_fetch_analyst_report_data, ticker.upper(), timespan)
+
+
 # ── Market Update ──────────────────────────────────────────────────────────
 
 _SECTOR_ETFS = [

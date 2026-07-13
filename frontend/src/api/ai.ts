@@ -37,3 +37,9 @@ export const sendChatMessage = (payload: {
   history: ChatMessage[];
   current_page: string;
 }) => client.post("/ai/chat", payload).then((r) => r.data);
+
+export const getAnalystReport = (payload: {
+  ticker: string;
+  timespan: string;
+  depth: string;
+}) => client.post("/ai/analyst-report", payload).then((r) => r.data);
