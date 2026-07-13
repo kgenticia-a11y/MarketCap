@@ -4,7 +4,6 @@ import {
   BarChart2,
   TrendingUp,
   CandlestickChart,
-  PieChart,
   Briefcase,
   Settings,
   History,
@@ -43,7 +42,6 @@ const tools = [
   { label: "Paper Trading",    icon: FlaskConical,     to: "/paper-trading" },
   { label: "Income Estimator", icon: BarChart2,        to: "/income" },
   { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },
-  { label: "Mutual Funds",     icon: PieChart,         to: "/funds" },
 ];
 
 const account = [

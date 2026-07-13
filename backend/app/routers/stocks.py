@@ -149,23 +149,6 @@ async def market_update():
         raise HTTPException(502, "Market data unavailable.")
 
 
-@router.get("/funds/categories")
-async def fund_categories():
-    return market_data.get_fund_categories()
-
-
-_VALID_FUND_CATEGORIES = {"Broad Market", "Bonds", "International", "Commodities", "Real Assets"}
-
-@router.get("/funds/{category}")
-async def funds_by_category(category: str):
-    if category not in _VALID_FUND_CATEGORIES:
-        raise HTTPException(400, "Invalid fund category.")
-    try:
-        return await market_data.get_funds(category)
-    except Exception:
-        logger.exception("funds failed for category=%s", category)
-        raise HTTPException(502, "Market data unavailable.")
-
 
 @router.get("/screener")
 async def screener():
