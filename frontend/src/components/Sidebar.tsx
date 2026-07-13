@@ -11,10 +11,8 @@ import {
   LogOut,
   LogIn,
   ScanSearch,
-  Bell,
   FileText,
   FlaskConical,
-  Star,
   Moon,
   Sun,
   X,
@@ -33,8 +31,6 @@ const menu = [
   { label: "Market Update",  icon: TrendingUp,      to: "/market" },
   { label: "Stock Screener", icon: ScanSearch,      to: "/screener" },
   { label: "Portfolio",      icon: Briefcase,       to: "/portfolio" },
-  { label: "Watchlist",      icon: Star,            to: "/watchlist" },
-  { label: "Alerts",         icon: Bell,            to: "/alerts" },
 ];
 
 // Tools: separate, deeper workflows. Grouping them under their own header

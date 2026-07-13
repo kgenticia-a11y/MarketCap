@@ -4,7 +4,9 @@ import ErrorBoundary from "../components/ErrorBoundary";
 import DailyBriefCard from "../components/DailyBriefCard";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import Watchlist from "./Watchlist";
+import Alerts from "./Alerts";
 
 interface StockSnap {
   ticker: string;
@@ -40,8 +42,22 @@ function IndexCard({ snap }: { snap: StockSnap }) {
   );
 }
 
+const TABS = [
+  { key: "overview",   label: "Overview" },
+  { key: "watchlist",  label: "Watchlist" },
+  { key: "alerts",     label: "Alerts" },
+] as const;
+
+type Tab = typeof TABS[number]["key"];
+
 export default function Home() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get("tab") ?? "overview") as Tab;
+
+  function setTab(key: Tab) {
+    setSearchParams(key === "overview" ? {} : { tab: key }, { replace: true });
+  }
 
   const { data: overview, isLoading: ovLoading, isError: ovError } = useQuery({
     queryKey: ["market-overview"],
@@ -72,6 +88,27 @@ export default function Home() {
   return (
     <ErrorBoundary label="Dashboard failed to load">
     <div className="p-6 space-y-6">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-border pb-0">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={clsx(
+              "px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors",
+              tab === key
+                ? "border-accent text-white"
+                : "border-transparent text-muted hover:text-white"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "watchlist" && <Watchlist />}
+      {tab === "alerts" && <Alerts />}
+      {tab === "overview" && <>
       {/* Index overview */}
       {ovLoading ? (
         <div className="grid grid-cols-3 gap-4">
@@ -140,6 +177,7 @@ export default function Home() {
               ))}
         </div>
       </div>
+      </>}
 
     </div>
     </ErrorBoundary>

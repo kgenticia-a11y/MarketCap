@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Stock from "./pages/Stock";
 import Portfolio from "./pages/Portfolio";
-import Watchlist from "./pages/Watchlist";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -17,7 +16,6 @@ import Settings from "./pages/Settings";
 import FeedbackPage from "./pages/Feedback";
 import Screener from "./pages/Screener";
 import PaperTrading from "./pages/PaperTrading";
-import Alerts from "./pages/Alerts";
 import Terms from "./pages/Terms";
 import AnalystReport from "./pages/AnalystReport";
 
@@ -44,7 +42,7 @@ function AppRoutes() {
       <Route path="/chart"    element={<Private title="Interactive Chart" fullHeight><InteractiveChart /></Private>} />
       <Route path="/stock/:ticker" element={<Private title="Stock Detail"><Stock /></Private>} />
       <Route path="/portfolio" element={<Private title="Portfolio"><Portfolio /></Private>} />
-      <Route path="/watchlist" element={<Private title="Watchlist"><Watchlist /></Private>} />
+      <Route path="/watchlist" element={<Navigate to="/?tab=watchlist" replace />} />
       <Route path="/market"   element={<Private title="Market Update"><MarketUpdate /></Private>} />
       <Route path="/income"   element={<Private title="Income Estimator"><IncomeEstimator /></Private>} />
       <Route path="/settings" element={<Private title="Settings"><Settings /></Private>} />
@@ -52,7 +50,7 @@ function AppRoutes() {
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
       <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
-      <Route path="/alerts"   element={<Private title="Alerts"><Alerts /></Private>} />
+      <Route path="/alerts"   element={<Navigate to="/?tab=alerts" replace />} />
       <Route path="/analyst-report" element={<Private title="Analyst Report"><AnalystReport /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}
