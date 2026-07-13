@@ -117,12 +117,9 @@ class _BoundedTTLCache:
 _QUOTE_CACHE_MAX   = 4_000
 _DETAILS_CACHE_MAX = 4_000
 _CHART_CACHE_MAX   = 4_000  # keyed by ticker+range+date, so ~6 ranges × tickers
-_FUNDS_CACHE_MAX   =    50
-
 _quote_cache:   _BoundedTTLCache = _BoundedTTLCache(_QUOTE_CACHE_MAX)
 _details_cache: _BoundedTTLCache = _BoundedTTLCache(_DETAILS_CACHE_MAX)
 _chart_cache:   _BoundedTTLCache = _BoundedTTLCache(_CHART_CACHE_MAX)
-_funds_cache:   _BoundedTTLCache = _BoundedTTLCache(_FUNDS_CACHE_MAX)
 _update_cache:  tuple[dict, float] | None = None
 _update_lock = asyncio.Lock()
 
@@ -131,7 +128,6 @@ _DETAILS_TTL = 300   # 5 min  — company fundamentals rarely change intraday
 _CHART_1D_TTL  =  60   # 1 min  — intraday candles need to be fairly fresh
 _CHART_TTL     = 300   # 5 min  — daily/weekly/monthly candles
 _UPDATE_TTL  = 300   # 5 min  — market-update sector/breadth data
-_FUNDS_TTL   = 600   # 10 min — fund data changes slowly
 
 # Stale-while-revalidate window. While a cached entry is past its TTL but
 # under SWR_MAX, the user gets the cached payload IMMEDIATELY and a fresh
@@ -141,7 +137,6 @@ _QUOTE_SWR_MAX   = _QUOTE_TTL   *  4   # 2 min  — still tradeable
 _DETAILS_SWR_MAX = _DETAILS_TTL *  6   # 30 min — descriptive fields rarely change
 _CHART_SWR_MAX   = _CHART_TTL   *  3   # 15 min — daily candles
 _CHART_1D_SWR_MAX= _CHART_1D_TTL*  3   # 3 min  — intraday
-_FUNDS_SWR_MAX   = _FUNDS_TTL   *  3   # 30 min
 
 # Single-flight tables: per-key Future for in-flight fetches. Concurrent
 # callers waiting on the same key reuse the first Future instead of each
@@ -150,7 +145,6 @@ _FUNDS_SWR_MAX   = _FUNDS_TTL   *  3   # 30 min
 _inflight_quote:   dict[str, asyncio.Future] = {}
 _inflight_details: dict[str, asyncio.Future] = {}
 _inflight_chart:   dict[str, asyncio.Future] = {}
-_inflight_funds:   dict[str, asyncio.Future] = {}
 
 
 async def _singleflight(
@@ -1066,99 +1060,6 @@ async def get_market_update() -> dict:
         return _update_cache[0]
     return await _refresh_market_update_blocking()
 
-
-# ── Mutual Funds / ETF Screener ────────────────────────────────────────────
-
-_FUND_CATEGORIES = {
-    "Broad Market": ["SPY", "QQQ", "IWM", "VTI", "DIA", "MDY"],
-    "Bonds":        ["BND", "AGG", "TLT", "SHY", "HYG", "LQD"],
-    "International":["EFA", "EEM", "VWO", "IEFA", "VEA", "ACWI"],
-    "Commodities":  ["GLD", "SLV", "USO", "GDX", "PDBC", "DBC"],
-    "Real Assets":  ["VNQ", "XLRE", "IYR", "SCHH", "REM", "MORT"],
-}
-
-
-def _fetch_fund_one(ticker: str, close) -> dict | None:
-    try:
-        info = _bounded_info(ticker)
-        last  = float(close[ticker].iloc[-1])
-        prev  = float(close[ticker].iloc[-2]) if len(close) >= 2 else last
-        chg   = ((last - prev) / prev * 100) if prev else 0
-        # Compute YTD return from Jan 1 close to avoid yfinance ytdReturn inconsistencies
-        try:
-            year_start = datetime(datetime.now().year, 1, 1)
-            hist_ytd = yf.Ticker(ticker).history(
-                start=year_start.strftime("%Y-%m-%d"),
-                end=datetime.now().strftime("%Y-%m-%d"),
-                interval="1d",
-            )
-            if len(hist_ytd) >= 2:
-                ytd_start = float(hist_ytd["Close"].iloc[0])
-                ytd_return = round((last - ytd_start) / ytd_start * 100, 2) if ytd_start else 0.0
-            else:
-                ytd_return = 0.0
-        except Exception:
-            ytd_return = 0.0
-        return {
-            "ticker":       ticker,
-            "name":         info.get("longName") or info.get("shortName", ticker),
-            "price":        round(last, 2),
-            "change_pct":   round(chg, 2),
-            "expense_ratio": round((info.get("annualReportExpenseRatio") or
-                                    info.get("expenseRatio") or 0) * 100, 3),
-            "aum_b":        round((info.get("totalAssets") or 0) / 1e9, 2),
-            "ytd_return":   ytd_return,
-            "category":     info.get("category", ""),
-        }
-    except Exception:
-        return None
-
-
-def _fetch_fund_category(tickers: list[str]) -> list[dict]:
-    raw = yf.download(
-        tickers, period="2d", interval="1d",
-        auto_adjust=True, progress=False, threads=True,
-    )
-    close = raw["Close"]
-    # Cap the per-category pool at 6 workers. Previously this scaled with the
-    # ticker count (one thread per ticker), which both leaked the timeout via
-    # shutdown(wait=True) and could fan out enough concurrent .info calls to
-    # trip Yahoo's per-IP throttle on dense categories.
-    max_workers = min(6, len(tickers))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        results = list(pool.map(lambda t: _fetch_fund_one(t, close), tickers))
-    return [r for r in results if r is not None]
-
-
-async def _fetch_funds_async(category: str, tickers: list[str]) -> list[dict]:
-    result = await _run(_fetch_fund_category, tickers)
-    _funds_cache.set(category, result, time.time())
-    return result
-
-
-async def get_funds(category: str) -> list[dict]:
-    tickers = _FUND_CATEGORIES.get(category, [])
-    if not tickers:
-        return []
-    now = time.time()
-    entry = _funds_cache.get(category)
-    if entry is not None:
-        age = now - entry[1]
-        if age < _FUNDS_TTL:
-            return entry[0]
-        if age < _FUNDS_SWR_MAX:
-            return _swr_serve_and_refresh(
-                category, entry, _inflight_funds,
-                lambda: _fetch_funds_async(category, tickers),
-            )
-    return await _singleflight(
-        _inflight_funds, category,
-        lambda: _fetch_funds_async(category, tickers),
-    )
-
-
-def get_fund_categories() -> list[str]:
-    return list(_FUND_CATEGORIES.keys())
 
 
 # ── Stock Screener ─────────────────────────────────────────────────────────

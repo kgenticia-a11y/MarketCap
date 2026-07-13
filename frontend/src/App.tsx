@@ -14,7 +14,6 @@ import IncomeEstimator from "./pages/IncomeEstimator";
 import MarketUpdate from "./pages/MarketUpdate";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
-import MutualFunds from "./pages/MutualFunds";
 import FeedbackPage from "./pages/Feedback";
 import Screener from "./pages/Screener";
 import PaperTrading from "./pages/PaperTrading";
@@ -47,7 +46,6 @@ function AppRoutes() {
       <Route path="/watchlist" element={<Private title="Watchlist"><Watchlist /></Private>} />
       <Route path="/market"   element={<Private title="Market Update"><MarketUpdate /></Private>} />
       <Route path="/income"   element={<Private title="Income Estimator"><IncomeEstimator /></Private>} />
-      <Route path="/funds"    element={<Private title="Mutual Funds"><MutualFunds /></Private>} />
       <Route path="/settings" element={<Private title="Settings"><Settings /></Private>} />
       <Route path="/history"  element={<Private title="History"><History /></Private>} />
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
