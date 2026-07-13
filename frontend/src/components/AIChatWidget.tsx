@@ -74,7 +74,7 @@ export default function AIChatWidget() {
             </div>
             <div>
               <p className="text-sm font-bold text-white">MarketCap Assistant</p>
-              <p className="text-[10px] text-muted">Powered by Claude</p>
+              <p className="text-[10px] text-muted">Powered by Meta Llama</p>
             </div>
           </div>
 

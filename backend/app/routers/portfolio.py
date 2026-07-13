@@ -363,9 +363,9 @@ Respond in the following JSON structure (no markdown, pure JSON):
             prompt=prompt,
             max_tokens=1536,
         )
-    except claude.ClaudeNotConfigured:
+    except claude.AINotConfigured:
         raise HTTPException(503, "AI analysis is not configured on this server.")
-    except claude.ClaudeRequestError:
+    except claude.AIRequestError:
         raise HTTPException(502, "AI analysis request failed.")
 
     if text.startswith("```"):

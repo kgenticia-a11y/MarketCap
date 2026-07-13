@@ -1,9 +1,10 @@
-"""Shared Anthropic Claude client used by every AI co-pilot feature
+"""Shared AI client used by every AI co-pilot feature
 (portfolio analysis, daily brief, chart analysis, earnings briefs, chat).
 
-Centralised here so every endpoint shares one model constant, one timeout
-policy, and one error type — callers just catch ClaudeNotConfigured /
-ClaudeRequestError and map them to the right HTTP status.
+Uses Meta Llama 3.3 70B via Groq's free inference API. Centralised here so
+every endpoint shares one model constant, one timeout policy, and one error
+type — callers just catch AINotConfigured / AIRequestError and map them to
+the right HTTP status.
 """
 import asyncio
 import logging
@@ -12,15 +13,20 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+AI_MODEL = "llama-3.3-70b-versatile"
 
 
-class ClaudeNotConfigured(Exception):
-    """Raised when ANTHROPIC_API_KEY is not set on the server."""
+class AINotConfigured(Exception):
+    """Raised when GROQ_API_KEY is not set on the server."""
 
 
-class ClaudeRequestError(Exception):
-    """Raised when the Anthropic API call itself fails."""
+class AIRequestError(Exception):
+    """Raised when the AI API call itself fails."""
+
+
+# Backward-compatible aliases so existing imports keep working during rollout.
+ClaudeNotConfigured = AINotConfigured
+ClaudeRequestError = AIRequestError
 
 
 async def ask_claude(
@@ -28,35 +34,38 @@ async def ask_claude(
     messages: list[dict[str, str]],
     max_tokens: int = 1024,
 ) -> str:
-    """Send a system prompt + conversation turns to Claude, return the text reply.
+    """Send a system prompt + conversation turns to the AI model, return the text reply.
 
-    `messages` is a list of {"role": "user"|"assistant", "content": str} dicts,
-    Anthropic Messages API style.
+    `messages` is a list of {"role": "user"|"assistant", "content": str} dicts.
+    Uses Groq's OpenAI-compatible chat completions API with Meta Llama.
     """
-    if not settings.anthropic_api_key:
-        raise ClaudeNotConfigured()
+    if not settings.groq_api_key:
+        raise AINotConfigured()
 
     try:
-        import anthropic
+        from groq import Groq
     except ImportError as exc:
-        raise ClaudeRequestError("Anthropic SDK not installed.") from exc
+        raise AIRequestError("Groq SDK not installed.") from exc
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = Groq(api_key=settings.groq_api_key)
+
+    api_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    api_messages.extend(messages)
+
     try:
         response = await asyncio.to_thread(
-            client.messages.create,
-            model=CLAUDE_MODEL,
+            client.chat.completions.create,
+            model=AI_MODEL,
+            messages=api_messages,
             max_tokens=max_tokens,
-            system=system,
-            messages=messages,
         )
     except Exception as exc:
-        logger.error("Claude API call failed: %s", exc)
-        raise ClaudeRequestError(str(exc)) from exc
+        logger.error("Groq API call failed: %s", exc)
+        raise AIRequestError(str(exc)) from exc
 
-    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    text = (response.choices[0].message.content or "").strip() if response.choices else ""
     if not text:
-        raise ClaudeRequestError("Claude returned an empty response.")
+        raise AIRequestError("AI model returned an empty response.")
     return text
 
 

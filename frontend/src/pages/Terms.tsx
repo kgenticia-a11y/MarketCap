@@ -153,7 +153,7 @@ export default function Terms() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">5. AI-Generated Content</h2>
             <p>
-              The Service uses large language models, including Anthropic's Claude, to generate
+              The Service uses large language models, including Meta's Llama (via Groq), to generate
               summaries such as pre-earnings briefs and similar analytical text ("AI Output"). You
               acknowledge:
             </p>
@@ -171,7 +171,7 @@ export default function Terms() {
               <li>
                 To generate AI Output, certain inputs (e.g., the ticker, public earnings data, and
                 similar context) are transmitted to third-party model providers (currently
-                Anthropic). We do not transmit your account credentials, portfolio cost basis, or
+                Groq / Meta). We do not transmit your account credentials, portfolio cost basis, or
                 position size for this purpose.
               </li>
               <li>
@@ -618,7 +618,7 @@ export default function Terms() {
                 database providers (e.g., Supabase, Fly.io, or successor providers); email
                 delivery providers; error-monitoring providers; market-data providers (which
                 receive ticker symbols and similar non-personal queries); and AI model providers
-                (currently Anthropic, which receives limited inputs as described in Section 5).
+                (currently Groq / Meta, which receives limited inputs as described in Section 5).
               </li>
               <li>
                 <strong className="text-white">Legal compliance and safety:</strong> when we
