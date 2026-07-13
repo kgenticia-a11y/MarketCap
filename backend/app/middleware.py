@@ -109,7 +109,7 @@ class AuthRateLimiter(BaseHTTPMiddleware):
         ("GET",   "/auth/data-export",    3, 300, False),
         # Anonymous feedback — stricter window to deter spam.
         ("POST",  "/feedback",            5, 300, False),
-        # ── AI endpoints — every request costs real Claude API money ─────
+        # ── AI endpoints — every request hits the Groq free-tier budget ──
         ("POST",  "/ai/chat",            10,  60, False),
         ("POST",  "/ai/chart-analysis",   6,  60, False),
         ("POST",  "/ai/earnings-brief",   6,  60, False),

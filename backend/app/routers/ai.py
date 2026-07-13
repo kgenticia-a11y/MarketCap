@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-def _claude_error_to_http(exc: Exception):
-    if isinstance(exc, claude.ClaudeNotConfigured):
+def _ai_error_to_http(exc: Exception):
+    if isinstance(exc, claude.AINotConfigured):
         raise HTTPException(503, "AI features are not configured on this server.")
-    if isinstance(exc, claude.ClaudeRequestError):
+    if isinstance(exc, claude.AIRequestError):
         raise HTTPException(502, "AI request failed. Please try again.")
     raise
 
@@ -142,7 +142,7 @@ Do not use markdown, headers, or bullet points — write flowing prose. Do not p
             max_tokens=400,
         )
     except Exception as exc:
-        _claude_error_to_http(exc)
+        _ai_error_to_http(exc)
 
     return {"brief": brief, "generated_at": datetime.now(timezone.utc).isoformat()}
 
@@ -230,7 +230,7 @@ Keep it under 150 words."""
             max_tokens=500,
         )
     except Exception as exc:
-        _claude_error_to_http(exc)
+        _ai_error_to_http(exc)
 
     return {
         "analysis": analysis,
@@ -298,7 +298,7 @@ Write a pre-earnings brief for a retail investor. Respond in pure JSON (no markd
                 max_tokens=500,
             )
         except Exception as exc:
-            _claude_error_to_http(exc)
+            _ai_error_to_http(exc)
 
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
@@ -386,6 +386,6 @@ User is currently viewing: {body.current_page or 'unknown page'}"""
     try:
         reply = await claude.ask_claude(system, messages, max_tokens=700)
     except Exception as exc:
-        _claude_error_to_http(exc)
+        _ai_error_to_http(exc)
 
     return {"reply": reply}
