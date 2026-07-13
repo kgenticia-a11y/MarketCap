@@ -8,6 +8,7 @@ import {
 import type { RiskProfile } from "../api/portfolio";
 import { listAccounts, type UserAccount } from "../api/accounts";
 import { getQuote } from "../api/stocks";
+import { useBatchedQuotes } from "../hooks/useBatchedQuotes";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -1073,11 +1074,12 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct, showAcc
   const [editShares, setEditShares] = useState(String(item.shares));
   const [editPrice, setEditPrice] = useState(String(item.avg_buy_price));
 
+  // Cache reader: useBatchedQuotes (page level) seeds this entry every 60s
+  // in a single request; the fallback queryFn only fires on a cold cache.
   const { data: quote } = useQuery({
     queryKey: ["quote", item.ticker],
     queryFn: () => getQuote(item.ticker),
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 90_000,
   });
 
   const currentPrice = quote?.price as number | undefined;
@@ -1210,7 +1212,8 @@ function PortfolioSummary({ items }: { items: PortfolioItem[] }) {
     queries: items.map(item => ({
       queryKey: ["quote", item.ticker],
       queryFn: () => getQuote(item.ticker),
-      staleTime: 60_000, refetchInterval: 60_000,
+      // Cache reader — seeded by useBatchedQuotes at the page level.
+      staleTime: 90_000,
     })),
   });
   const quotes = items.map((item, i) => ({ item, price: (results[i].data?.price as number) ?? item.avg_buy_price }));
@@ -1329,6 +1332,9 @@ export default function Portfolio() {
     () => accountId === null ? allItems : allItems.filter(i => i.account_id === accountId),
     [allItems, accountId],
   );
+  // One batched request keeps every row's and the summary's quote fresh —
+  // the per-row queries below are pure cache readers.
+  useBatchedQuotes(allItems.map(i => i.ticker));
   const showAccountColumn = accountId === null && accounts.length > 0;
 
   if (isLoading) {

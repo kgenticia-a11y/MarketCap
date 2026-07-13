@@ -20,9 +20,26 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def create_access_token(user_id: int) -> str:
+# Verifying against this constant hash when no user row exists keeps the
+# login/register code path duration independent of whether the email is
+# registered — bcrypt otherwise only ran for real accounts, which let an
+# attacker enumerate registered emails by response time.
+_TIMING_EQUALIZER_HASH = bcrypt.hashpw(b"timing-equalizer-not-a-real-password", bcrypt.gensalt()).decode()
+
+
+def equalize_timing(password: str) -> None:
+    """Burn the same bcrypt work a real verification would cost."""
+    bcrypt.checkpw(password.encode(), _TIMING_EQUALIZER_HASH.encode())
+
+
+def create_access_token(user_id: int, token_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    # "tv" (token version) is bumped on password change, which invalidates
+    # every previously issued token for the account.
+    return jwt.encode(
+        {"sub": str(user_id), "exp": expire, "tv": token_version},
+        settings.jwt_secret, algorithm=settings.jwt_algorithm,
+    )
 
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
@@ -45,5 +62,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_error
     user = db.query(models.User).filter(models.User.id == uid).first()
     if user is None:
+        raise credentials_error
+    # Tokens issued before the account's current token_version (bumped on
+    # password change) are dead — a stolen token can't outlive a reset.
+    if payload.get("tv", 0) != (user.token_version or 0):
         raise credentials_error
     return user

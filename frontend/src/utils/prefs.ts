@@ -15,7 +15,13 @@ export const DEFAULT_PREFS: Prefs = {
 const PREF_KEY = "mc_prefs";
 
 export function loadPrefs(): Prefs {
-  try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") }; }
+  try {
+    const p = { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") };
+    // Floor the poll interval — a tiny saved value would hammer the API
+    // (and trip its rate limits) with no visible benefit.
+    p.refetchSec = Math.max(15, Number(p.refetchSec) || DEFAULT_PREFS.refetchSec);
+    return p;
+  }
   catch { return DEFAULT_PREFS; }
 }
 

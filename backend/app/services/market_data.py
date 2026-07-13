@@ -12,7 +12,7 @@ import time
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed, wait as fut_wait
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import Any, Callable, Awaitable
 
 import httpx
@@ -621,7 +621,9 @@ def _fetch_income_data(ticker: str) -> dict:
     # Format ex-dividend date
     raw_ex = info.get("exDividendDate")
     try:
-        ex_div_date = datetime.fromtimestamp(int(raw_ex)).strftime("%b %d, %Y") if raw_ex else ""
+        # Yahoo sends UTC-midnight timestamps; naive fromtimestamp() shifted
+        # the displayed date by a day on any non-UTC host.
+        ex_div_date = datetime.fromtimestamp(int(raw_ex), tz=timezone.utc).strftime("%b %d, %Y") if raw_ex else ""
     except Exception:
         ex_div_date = ""
 
@@ -1369,7 +1371,12 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "beta":           round(beta, 3) if isinstance(beta, (int, float)) else None,
             "allocation_pct": 0,  # filled by the router after aggregation
         }
-    except Exception:
+    except Exception as exc:
+        # The fallback row (price = cost basis, P&L 0) keeps the portfolio
+        # rendering, but silently swallowing the cause made data corruption
+        # undiagnosable — every totals/allocation/health number quietly
+        # absorbed the fake value. Log loudly.
+        logger.warning("portfolio item fetch failed for %s — serving cost-basis fallback: %s", ticker, exc)
         cost = shares * avg_buy_price
         return {
             "ticker": ticker, "name": ticker, "sector": "Other", "industry": "",

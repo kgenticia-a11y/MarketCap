@@ -6,6 +6,9 @@ export const searchStocks = (q: string) =>
 export const getQuote = (ticker: string) =>
   client.get(`/stocks/quote/${ticker}`).then((r) => r.data);
 
+export const getQuotes = (tickers: string[]) =>
+  client.get("/stocks/quotes", { params: { tickers: tickers.join(",") } }).then((r) => r.data);
+
 export const getDetails = (ticker: string) =>
   client.get(`/stocks/details/${ticker}`).then((r) => r.data);
 

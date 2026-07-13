@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas, auth
 from app.config import settings
 from app.database import get_db
+from app.market_time import market_date
 from app.services import market_data, health_score, claude
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ async def get_analytics(
     # analytics requests on the same day could both see no existing snapshot
     # and both try to INSERT, hitting the UniqueConstraint. Catch the resulting
     # IntegrityError and fall back to an UPDATE on the row that won the race.
-    today = date_type.today().isoformat()
+    today = market_date().isoformat()
     snap = db.query(models.PortfolioSnapshot).filter_by(
         portfolio_id=portfolio.id, date=today
     ).first()
@@ -121,7 +122,10 @@ async def get_analytics(
     benchmark = []
     if len(snapshot_list) >= 2:
         start_date = snapshot_list[0]["date"]
-        end_date = today
+        # yfinance treats `end` as EXCLUSIVE, so passing today dropped the
+        # most recent SPY close and left the benchmark line one day behind
+        # the portfolio line at its most-viewed point.
+        end_date = (market_date() + timedelta(days=1)).isoformat()
         try:
             benchmark = await market_data.get_benchmark_history(start_date, end_date)
         except Exception:
@@ -171,7 +175,7 @@ async def get_health_score(
     result = health_score.compute_health_score(holdings, total_value)
 
     # Upsert today's row — same TOCTOU-safe pattern as the snapshot upsert above.
-    today = date_type.today().isoformat()
+    today = market_date().isoformat()
     row = db.query(models.PortfolioHealthScore).filter_by(
         portfolio_id=portfolio.id, date=today
     ).first()
@@ -290,6 +294,10 @@ def remove_item(
     )
     if account_id is not None:
         q = q.filter(models.PortfolioItem.account_id == account_id)
+    elif q.count() > 1:
+        # Same ticker held in multiple accounts: picking .first() silently
+        # deleted an arbitrary one. Force the caller to disambiguate.
+        raise HTTPException(409, "Ticker exists in multiple accounts — pass account_id.")
     item = q.first()
     if not item:
         raise HTTPException(404, "Ticker not in portfolio")
@@ -382,6 +390,10 @@ def update_item(
     )
     if account_id is not None:
         q = q.filter(models.PortfolioItem.account_id == account_id)
+    elif q.count() > 1:
+        # Same guard as remove_item: never silently update an arbitrary one
+        # of several same-ticker positions across accounts.
+        raise HTTPException(409, "Ticker exists in multiple accounts — pass account_id.")
     item = q.first()
     if not item:
         raise HTTPException(404, "Ticker not in portfolio")

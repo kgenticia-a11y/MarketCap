@@ -168,7 +168,12 @@ class ChartAnalysisRequest(BaseModel):
 
 
 @router.post("/chart-analysis")
-async def chart_analysis(body: ChartAnalysisRequest):
+async def chart_analysis(
+    body: ChartAnalysisRequest,
+    # Every other /ai/* route requires auth; this one was anonymous, letting
+    # any unauthenticated caller burn paid Claude API budget.
+    current_user: models.User = Depends(auth.get_current_user),
+):
     closes = [b.c for b in body.bars if b.c is not None]
     highs = [b.h for b in body.bars if b.h is not None] or closes
     lows = [b.l for b in body.bars if b.l is not None] or closes
@@ -242,13 +247,17 @@ Keep it under 150 words."""
 # ─────────────────────────────────────────────────────────────────────────
 
 class EarningsBriefRequest(BaseModel):
-    ticker: str = Field(..., max_length=10)
-    name: str = Field(..., max_length=200)
-    earnings_date: str = Field(..., max_length=10)
-    time: str = Field(..., max_length=5)
-    eps_estimate: float
-    eps_actual_prev: float
-    beat_history: str = Field(..., max_length=10)
+    # The generated brief is cached globally per ticker+date and served to
+    # every user, so these client-supplied fields are locked to strict
+    # shapes — free-form text here was a prompt-injection / shared-cache
+    # poisoning vector.
+    ticker: str = Field(..., max_length=10, pattern=r"^[A-Za-z0-9.\-]{1,10}$")
+    name: str = Field(..., max_length=100, pattern=r"^[\w .,&'()\-]{1,100}$")
+    earnings_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    time: str = Field(..., pattern=r"^(AMC|BMO)$")
+    eps_estimate: float = Field(..., ge=-100_000, le=100_000)
+    eps_actual_prev: float = Field(..., ge=-100_000, le=100_000)
+    beat_history: str = Field(..., pattern=r"^[0-9]/[0-9]$")
 
 
 @router.post("/earnings-brief")

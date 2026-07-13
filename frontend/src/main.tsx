@@ -22,8 +22,19 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      // Exponential back-off: 1 s, then max 10 s — avoids hammering a struggling server.
-      retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 10_000),
+      // Respect the server's Retry-After on 429s (client.ts stashes it on
+      // the error); otherwise exponential back-off 1s → max 10s.
+      retryDelay: (attempt, error) => {
+        const ra = (error as { retryAfterSeconds?: number })?.retryAfterSeconds;
+        if (ra) return ra * 1_000;
+        return Math.min(1_000 * 2 ** attempt, 10_000);
+      },
+      // Data was stale-at-0ms by default, so every remount and every
+      // window focus refired the whole page's requests — a burst of
+      // dozens of calls that read as "slow loading". 30s matches the
+      // backend cache TTLs; screens that need faster data set their own.
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
     },
   },
 });

@@ -70,6 +70,15 @@ def run_lightweight_migrations() -> None:
                     logger.info("[migration] %s", stmt)
                     conn.execute(text(stmt))
 
+    # JWT invalidation on password change: token_version on users.
+    if inspector.has_table("users"):
+        cols = {c["name"] for c in inspector.get_columns("users")}
+        if "token_version" not in cols:
+            stmt = "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"
+            with engine.begin() as conn:
+                logger.info("[migration] %s", stmt)
+                conn.execute(text(stmt))
+
     # Server-side alert evaluation: triggered_at on price_alerts. The
     # evaluator and the frontend both used this column, but it was never
     # added to the model — every evaluation pass crashed until now.

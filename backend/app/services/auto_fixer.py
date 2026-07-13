@@ -231,6 +231,21 @@ def _apply_patterns() -> list[dict]:
             continue
 
         updated = re.sub(pat["find"], pat["replace"], content, count=1, flags=re.MULTILINE)
+        # Validate BEFORE writing: the syntax check at the top of the run
+        # inspects the pre-patch file, so a bad replacement used to land on
+        # disk and only be caught by the NEXT run — after the damage was live.
+        if target.suffix == ".py":
+            try:
+                compile(updated, str(target), "exec")
+            except SyntaxError as exc:
+                results.append({
+                    "name":        pat["name"],
+                    "description": pat["description"],
+                    "file":        pat["glob"],
+                    "applied":     False,
+                    "reason":      f"replacement would break syntax: {exc}",
+                })
+                continue
         try:
             target.write_text(updated, encoding="utf-8")
             results.append({

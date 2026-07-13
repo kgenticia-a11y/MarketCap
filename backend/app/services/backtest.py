@@ -77,7 +77,7 @@ def _buy_hold_series(close: pd.Series, amount: float) -> pd.Series:
     return close * shares
 
 
-def _dca_series(close: pd.Series, amount: float, frequency: Frequency) -> pd.Series:
+def _dca_series(close: pd.Series, amount: float, frequency: Frequency) -> tuple[pd.Series, list[tuple[pd.Timestamp, float]]]:
     """Evenly-spaced contributions over the period. ``amount`` is the
     total budget, so a 5y monthly DCA of $10K invests ≈$167 per month —
     making the strategy directly comparable to a $10K buy & hold."""
@@ -105,7 +105,8 @@ def _dca_series(close: pd.Series, amount: float, frequency: Frequency) -> pd.Ser
             cash_invested += per_contribution
             contrib_idx += 1
         values.append(shares_held * float(price))
-    return pd.Series(values, index=close.index)
+    cashflows = [(d, per_contribution) for d in contribution_dates]
+    return pd.Series(values, index=close.index), cashflows
 
 
 def _fetch_close(ticker: str, days: int) -> pd.Series:
@@ -135,23 +136,56 @@ def _fetch_close(ticker: str, days: int) -> pd.Series:
     return close
 
 
-def _run_strategy(close: pd.Series, strategy: Strategy, amount: float, frequency: Frequency) -> pd.Series:
+def _run_strategy(close: pd.Series, strategy: Strategy, amount: float, frequency: Frequency):
+    """Returns (value_series, cashflows). cashflows is None for lump-sum
+    strategies and the contribution schedule for DCA — _summary needs it to
+    compute an honest annualized figure."""
     if strategy == "buy_hold":
-        return _buy_hold_series(close, amount)
+        return _buy_hold_series(close, amount), None
     if strategy == "dca":
         return _dca_series(close, amount, frequency)
     raise ValueError(f"Unknown strategy '{strategy}'.")
 
 
-def _summary(values: pd.Series, amount: float) -> dict:
+def _money_weighted_cagr_pct(end_value: float, cashflows: list, end_ts) -> float:
+    """Annualized money-weighted (IRR) return for a contribution schedule,
+    solved by bisection on sum(c·(1+r)^yᵢ) = end_value. The old lump-sum
+    formula treated every DCA dollar as if invested from day one, which
+    systematically misstated the strategy's annualized return."""
+    years = [max(0.0, (end_ts - ts).days / 365.25) for ts, _ in cashflows]
+    if max(years, default=0.0) < 1 / 365.25:
+        return 0.0
+
+    def fv(rate: float) -> float:
+        return sum(c * (1.0 + rate) ** y for (_, c), y in zip(cashflows, years))
+
+    lo, hi = -0.9999, 10.0
+    if end_value <= fv(lo):
+        return lo * 100
+    if end_value >= fv(hi):
+        return hi * 100
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if fv(mid) < end_value:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2 * 100
+
+
+def _summary(values: pd.Series, amount: float, cashflows: list | None = None) -> dict:
     """Headline stats for the result card. CAGR uses calendar-day delta
-    so a 5y window comes out as ≈5 even if Yahoo trimmed a few days."""
+    so a 5y window comes out as ≈5 even if Yahoo trimmed a few days.
+    For DCA (cashflows given) the annualized figure is money-weighted."""
     start_value = amount
     end_value = float(values.iloc[-1])
     days = max(1, (values.index[-1] - values.index[0]).days)
     years = days / 365.25
     total_return_pct = (end_value / start_value - 1) * 100
-    cagr_pct = ((end_value / start_value) ** (1 / years) - 1) * 100 if years > 0 else 0.0
+    if cashflows:
+        cagr_pct = _money_weighted_cagr_pct(end_value, cashflows, values.index[-1])
+    else:
+        cagr_pct = ((end_value / start_value) ** (1 / years) - 1) * 100 if years > 0 else 0.0
     return {
         "start_value": round(start_value, 2),
         "end_value": round(end_value, 2),
@@ -173,7 +207,7 @@ def _backtest_sync(
     days = _PERIOD_TO_DAYS[period]
 
     ticker_close = _fetch_close(ticker.upper(), days)
-    ticker_values = _run_strategy(ticker_close, strategy, amount, frequency)
+    ticker_values, ticker_cashflows = _run_strategy(ticker_close, strategy, amount, frequency)
 
     # SPY benchmark uses buy-and-hold regardless of the user's strategy
     # choice — the question the chart answers is "did your strategy beat
@@ -194,7 +228,7 @@ def _backtest_sync(
         "strategy": strategy,
         "period": period,
         "frequency": frequency if strategy == "dca" else None,
-        "summary": _summary(ticker_values, amount),
+        "summary": _summary(ticker_values, amount, ticker_cashflows),
         "chart": _resample_for_chart(ticker_values),
         "benchmark": {
             "ticker": _BENCHMARK,

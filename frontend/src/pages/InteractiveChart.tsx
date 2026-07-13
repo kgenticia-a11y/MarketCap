@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { loadPrefs } from "../utils/prefs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getChart, getQuote, searchStocks } from "../api/stocks";
+import { useBatchedQuotes } from "../hooks/useBatchedQuotes";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "../api/watchlist";
 import { addToPortfolio } from "../api/portfolio";
 import CandlestickChart from "../components/CandlestickChart";
@@ -111,6 +112,9 @@ export default function InteractiveChart() {
   const prefs = loadPrefs();
   const refetchMs = prefs.refetchSec * 1000;
   const [tabs, setTabs] = useState<Tab[]>(DEFAULT_TABS);
+  // One batched request covers every tab's mini-row quote (was one request
+  // per tab on mount); the TopValueRow queries are cache readers.
+  useBatchedQuotes(tabs.map(t => t.ticker));
   const [activeTicker, setActiveTicker] = useState("AAPL");
   const [range, setRange] = useState<string>(prefs.defaultRange);
   const [modal, setModal] = useState<PortfolioModal | null>(null);
@@ -404,10 +408,11 @@ function TopValueRow({
   active: boolean;
   onClick: () => void;
 }) {
+  // Cache reader — seeded by useBatchedQuotes in the page component.
   const { data: quote } = useQuery({
     queryKey: ["quote", ticker],
     queryFn: () => getQuote(ticker),
-    staleTime: 60_000,
+    staleTime: 90_000,
   });
 
   const price: number = quote?.price ?? 0;

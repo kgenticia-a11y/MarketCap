@@ -45,6 +45,9 @@ class User(Base):
     # ISO timestamp of when the user accepted the Terms of Service.
     # NULL means they registered before terms were enforced (legacy).
     terms_accepted_at = Column(DateTime, nullable=True)
+    # Bumped on password change; embedded in JWTs as "tv" so every token
+    # issued before the change stops validating immediately.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
     portfolios   = relationship("Portfolio",    back_populates="owner", cascade="all, delete")
     watchlist    = relationship("Watchlist",    back_populates="owner", cascade="all, delete")
