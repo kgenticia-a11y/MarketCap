@@ -20,6 +20,7 @@ import yfinance as yf
 
 from app.config import settings
 from app.services.nyse_universe import NYSE_EXPANSION, assert_unique_universe
+from app.services.nasdaq_universe import NASDAQ_EXPANSION
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ _info_pool = ThreadPoolExecutor(
 
 # Shared pool for chunked batch downloads. _download_chunked previously
 # created a throwaway 5-worker pool per call, so overlapping refresh loops
-# (overview / market-update / screener — all much longer now at 2,099
+# (overview / market-update / screener — all much longer now at 3,099
 # tickers) could stack 10-15+ concurrent Yahoo connections, past the
 # ~10-per-replica throttle ceiling documented in config.py. One shared pool
 # makes concurrent callers queue behind the same 5 download slots instead
@@ -453,7 +454,7 @@ async def get_market_indices() -> list[dict]:
 # Sectors are evenly represented so the breadth bar and the screener cover
 # the same set; a stock that appears in one always appears in the others.
 # The 599-stock core list below is extended with the 1,500-stock NYSE
-# expansion (nyse_universe.py) for a combined universe of 2,099.
+# expansion (nyse_universe.py) for a combined universe of 3,099.
 _UNIVERSE = [
     # Technology (60)
     "AAPL", "MSFT", "NVDA", "AMD", "INTC", "CSCO", "ORCL", "CRM", "ADBE", "QCOM",
@@ -538,12 +539,12 @@ _UNIVERSE = [
 # Freeze as a tuple so aliasing (_SCREENER_UNIVERSE = _UNIVERSE below) can't
 # accidentally mutate the canonical list via the alias.
 assert_unique_universe("_UNIVERSE core", _UNIVERSE, expected=599)
-# Append the NYSE expansion (1,500 NYSE-only common stocks, largest market
-# cap first — see nyse_universe.py for the selection rules). The combined
-# size is derived from the two pinned lists, so only a cross-list duplicate
-# can fail here — and the error names it.
-_UNIVERSE = _UNIVERSE + list(NYSE_EXPANSION)
-assert_unique_universe("_UNIVERSE (core + NYSE expansion)", _UNIVERSE)
+# Append the NYSE expansion (1,500 NYSE-only common stocks) and the Nasdaq
+# expansion (1,000 Nasdaq-only common stocks, largest market cap first).
+# The combined size is derived from the three pinned lists, so only a
+# cross-list duplicate can fail here — and the error names it.
+_UNIVERSE = _UNIVERSE + list(NYSE_EXPANSION) + list(NASDAQ_EXPANSION)
+assert_unique_universe("_UNIVERSE (core + NYSE + Nasdaq expansion)", _UNIVERSE)
 _UNIVERSE = tuple(_UNIVERSE)
 
 
@@ -585,7 +586,7 @@ def _fetch_gainers_losers() -> dict:
 async def get_gainers_losers() -> dict:
     # The market-update refresh loop already downloads the full universe
     # every ~4.5 min and keeps its result warm. Serve gainers/losers from
-    # that cache instead of re-downloading 2,099 tickers on the overview's
+    # that cache instead of re-downloading 3,099 tickers on the overview's
     # faster (~60s) cadence — the two loops were independently duplicating
     # the app's single heaviest fetch. Fall back to a direct fetch only
     # while the update cache is cold or stale (first seconds after boot,
@@ -927,7 +928,7 @@ def _fast_info_price_change(fi) -> tuple[float, float, float] | None:
 #
 # The budget scales with how much work is actually queued: the old fixed 6s
 # was tuned for the 599-stock universe, where a bad throttle event dropped
-# tens of tickers. At 2,099 stocks the same event drops hundreds, and a
+# tens of tickers. At 3,099 stocks the same event drops hundreds, and a
 # fixed 6s pass (≈52 recoveries) could never catch up — breadth and the
 # screener silently under-covered until Yahoo behaved again. FLOOR keeps
 # small passes snappy (cold user-facing paths); MAX bounds a mass-outage
@@ -1191,7 +1192,7 @@ def _fetch_market_update() -> dict:
             })
     sectors.sort(key=lambda x: x["change_pct"], reverse=True)
 
-    # Gainers / losers across the canonical 2,099-stock universe
+    # Gainers / losers across the canonical 3,099-stock universe
     stocks = []
     for ticker in _UNIVERSE:
         if ticker in have:
@@ -1254,7 +1255,7 @@ async def _refresh_market_update_blocking() -> dict:
 async def get_market_update() -> dict:
     """Return the market-update payload.
 
-    Stale-while-revalidate: a full-universe refresh takes ~60s at 2,099
+    Stale-while-revalidate: a full-universe refresh takes ~60s at 3,099
     tickers, so the cache routinely outlives its TTL for a stretch of every
     refresh-loop cycle. Blocking a user request on that refresh made the
     dashboard's market-update section hang past the frontend's patience.
@@ -1280,7 +1281,7 @@ async def get_market_update() -> dict:
 
 # ── Stock Screener ─────────────────────────────────────────────────────────
 
-# The screener shows the same 2,099 stocks tracked by breadth and gainers/losers.
+# The screener shows the same 3,099 stocks tracked by breadth and gainers/losers.
 _SCREENER_UNIVERSE = _UNIVERSE
 
 _screener_data: list = []
@@ -1312,7 +1313,7 @@ def _bounded_info(ticker: str, timeout: float = 3.0) -> dict:
 
 # Company metadata (name/sector/industry/52-week stats/PE/dividend rate)
 # changes slowly, but the screener was re-pulling full `.info` — Yahoo's
-# heaviest endpoint — for all 2,099 tickers on every ~29-min refresh. Cache
+# heaviest endpoint — for all 3,099 tickers on every ~29-min refresh. Cache
 # the .info-derived fields per ticker for 6h and refresh only price/change
 # each cycle. Bounded by the universe size, so no LRU machinery needed.
 # Volume (and its Low/Average/High bucket) rides along with the metadata,
@@ -1434,7 +1435,7 @@ def _fetch_screener_inner() -> list[dict]:
         # Publish a partial snapshot so concurrent requests — which land on
         # the stale-cache path while _screener_fetching is claimed — see a
         # growing list instead of an empty screener for the whole cold
-        # fetch (minutes at 2,099 tickers). Only when it beats what's
+        # fetch (minutes at 3,099 tickers). Only when it beats what's
         # cached: a stale-but-complete list outranks a partial one, so warm
         # refreshes keep serving the old data until this fetch finishes.
         # _screener_ts stays untouched, so the partial still counts as
@@ -1542,7 +1543,7 @@ async def get_screener() -> list[dict]:
 # Refresh slightly ahead of the TTL so the cache never goes stale under
 # normal conditions. Floors keep the refresher from hammering Yahoo if
 # someone sets the TTL to a tiny value.
-# The update refresh itself takes ~60s at 2,099 tickers and the loop sleeps
+# The update refresh itself takes ~60s at 3,099 tickers and the loop sleeps
 # AFTER the fetch completes, so the margin must absorb the fetch duration or
 # the cache spends part of every cycle past its TTL.
 _UPDATE_REFRESH_INTERVAL   = max(60,  _UPDATE_TTL   - 90)
