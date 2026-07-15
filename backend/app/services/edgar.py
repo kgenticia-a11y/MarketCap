@@ -45,10 +45,18 @@ async def _get_json(url: str, timeout: float = 30.0) -> dict:
 async def get_cik(ticker: str) -> int | None:
     """Resolve a ticker to its SEC CIK number. Returns None if unknown."""
     global _ticker_map, _ticker_map_ts
+    # Check while holding the lock; serve from cache without fetching.
     async with _ticker_map_lock:
+        if _ticker_map and time.time() - _ticker_map_ts <= _TICKER_MAP_TTL:
+            return _ticker_map.get(ticker.upper())
+    # Cache is stale — fetch the 2 MB map WITHOUT holding the lock so concurrent
+    # CIK lookups don't block for the full network round-trip (up to 30 s).
+    data = await _get_json("https://www.sec.gov/files/company_tickers.json")
+    new_map = {v["ticker"].upper(): int(v["cik_str"]) for v in data.values()}
+    async with _ticker_map_lock:
+        # Guard against a parallel fetch that may have already refreshed.
         if not _ticker_map or time.time() - _ticker_map_ts > _TICKER_MAP_TTL:
-            data = await _get_json("https://www.sec.gov/files/company_tickers.json")
-            _ticker_map = {v["ticker"].upper(): int(v["cik_str"]) for v in data.values()}
+            _ticker_map = new_map
             _ticker_map_ts = time.time()
     return _ticker_map.get(ticker.upper())
 
@@ -153,7 +161,11 @@ def _annual_points(tag_data: dict, kind: str, unit: str = "USD") -> dict[int, fl
                     span_days = (_date(y1, m1, d1) - _date(y0, m0, d0)).days
                 except ValueError:
                     continue
-                if not (330 <= span_days <= 370):
+                # 330–380: accepts standard 52-week years (364–366 d) AND
+                # 53-week fiscal years (371–372 d, e.g. Walmart/Target).
+                # Anything outside this range is a quarter or a 13-month
+                # transition period (10-KT) and is excluded.
+                if not (330 <= span_days <= 380):
                     continue
             else:
                 if form not in ("10-K", "10-K/A", "20-F"):

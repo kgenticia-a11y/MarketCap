@@ -250,7 +250,7 @@ def altman_z_score(series: dict[str, Series], market_cap: float | None) -> dict 
     comp["working_capital_to_assets"] = ((ca.get(y, 0) - cl.get(y, 0)) / ta) if y in ca and y in cl else None
     comp["retained_earnings_to_assets"] = (re[y] / ta) if y in re else None
     comp["ebit_to_assets"] = (op[y] / ta) if y in op else None
-    comp["market_value_to_liabilities"] = (market_cap / tl) if market_cap else None
+    comp["market_value_to_liabilities"] = (market_cap / tl) if market_cap is not None else None
     comp["sales_to_assets"] = (rev[y] / ta) if y in rev else None
 
     weights = {
@@ -467,7 +467,7 @@ def generate_insights(profile: dict, series: dict[str, Series], phases: list[dic
         pos = [p for p in ocf if p["value"] > 0]
         ins["cash_flow"].append(
             f"Operating cash flow was positive in {len(pos)} of {len(ocf)} filed years"
-            + (f", most recently {_fmt_money(ocf[-1]['value'])} in FY{ocf[-1]['year']}." if ocf else ".")
+            + (f", most recently {_fmt_money(pos[-1]['value'])} in FY{pos[-1]['year']}." if pos else ".")
         )
         fcf_years = [(p["year"], p["value"] - abs(capex.get(p["year"], 0))) for p in ocf if p["year"] in capex]
         if fcf_years:
