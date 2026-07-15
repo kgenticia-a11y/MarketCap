@@ -160,7 +160,7 @@ const MODES = [
   {
     key: "ai",
     label: "AI Narrative Report",
-    desc: "Institutional-format report with narrative written by Meta Llama",
+    desc: "Institutional-format report with AI-written narrative",
   },
 ] as const;
 
@@ -395,7 +395,7 @@ export default function AnalystReport() {
 
       children.push(
         new Paragraph({ spacing: { before: 400 }, children: [new TextRun({ text: report.disclaimer || "", italics: true, size: 18, color: "999999" })] }),
-        new Paragraph({ children: [new TextRun({ text: "Powered by Meta Llama", size: 18, color: "999999" })] }),
+        new Paragraph({ children: [new TextRun({ text: "Powered by AI", size: 18, color: "999999" })] }),
       );
 
       const doc = new Document({
@@ -802,7 +802,7 @@ export default function AnalystReport() {
             {/* Footer */}
             <div className="bg-surface rounded-xl border border-border p-4 space-y-1">
               <p className="text-xs text-muted">{report.disclaimer}</p>
-              <p className="text-xs text-muted/60">Powered by Meta Llama | Generated {new Date(report.generated_at).toLocaleString()}</p>
+              <p className="text-xs text-muted/60">Powered by AI | Generated {new Date(report.generated_at).toLocaleString()}</p>
             </div>
           </div>
         </>

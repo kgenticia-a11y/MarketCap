@@ -153,7 +153,7 @@ export default function Terms() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">5. AI-Generated Content</h2>
             <p>
-              The Service uses large language models, including Meta's Llama (via Groq), to generate
+              The Service uses third-party large language models (served via Groq) to generate
               summaries such as pre-earnings briefs and similar analytical text ("AI Output"). You
               acknowledge:
             </p>
