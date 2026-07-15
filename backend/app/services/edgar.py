@@ -13,6 +13,7 @@ module makes at most 3 requests per report and caches the heavy payloads.
 import asyncio
 import logging
 import time
+from datetime import date as _date
 
 import certifi
 import httpx
@@ -143,11 +144,16 @@ def _annual_points(tag_data: dict, kind: str, unit: str = "USD") -> dict[int, fl
                 start = f.get("start", "")
                 if not start:
                     continue
-                # ~annual span (330-400 days) — excludes quarterly facts
-                y0, m0, d0 = (int(x) for x in start.split("-"))
-                y1, m1, d1 = (int(x) for x in end.split("-"))
-                span_days = (y1 - y0) * 365 + (m1 - m0) * 30 + (d1 - d0)
-                if not (330 <= span_days <= 400):
+                # ~annual span (330-370 days) — excludes quarterly facts and
+                # 13-month fiscal-year transitions (10-KT). Use real date
+                # arithmetic; the month*30 approximation accepted 13-month spans.
+                try:
+                    y0, m0, d0 = (int(x) for x in start.split("-"))
+                    y1, m1, d1 = (int(x) for x in end.split("-"))
+                    span_days = (_date(y1, m1, d1) - _date(y0, m0, d0)).days
+                except ValueError:
+                    continue
+                if not (330 <= span_days <= 370):
                     continue
             else:
                 if form not in ("10-K", "10-K/A", "20-F"):
@@ -185,8 +191,15 @@ def extract_annual_series(facts: dict) -> dict[str, list[dict]]:
         for tag in tags:
             if tag not in gaap:
                 continue
-            for year, val in _annual_points(gaap[tag], _DURATION, unit=unit).items():
+            points = _annual_points(gaap[tag], _DURATION, unit=unit)
+            if not points:
+                continue
+            for year, val in points.items():
                 merged.setdefault(year, val)
+            # Use only the first tag that has data — do not mix diluted and
+            # basic share counts across years (diluted > basic, so blending
+            # across tag boundaries produces spurious dilution signals).
+            break
         out[name] = [{"year": y, "value": merged[y]} for y in sorted(merged)]
 
     return out

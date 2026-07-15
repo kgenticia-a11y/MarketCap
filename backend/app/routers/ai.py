@@ -23,7 +23,7 @@ def _ai_error_to_http(exc: Exception):
         raise HTTPException(503, "AI features are not configured on this server.")
     if isinstance(exc, claude.AIRequestError):
         raise HTTPException(502, "AI request failed. Please try again.")
-    raise
+    raise exc
 
 
 async def _user_holdings(current_user: models.User, db: Session) -> list[dict]:

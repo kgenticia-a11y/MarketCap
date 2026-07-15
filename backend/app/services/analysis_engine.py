@@ -101,7 +101,12 @@ def segment_growth_phases(revenue: Series) -> list[dict]:
     for ph in phases:
         if (merged and ph["start_year"] == ph["end_year"]
                 and merged[-1]["label"] != "Decline" and ph["label"] != "Decline"):
-            merged[-1]["end_year"] = ph["end_year"]
+            prev = merged[-1]
+            n_prev = max(prev["end_year"] - prev["start_year"], 1)
+            prev["avg_growth_pct"] = round(
+                (prev["avg_growth_pct"] * n_prev + ph["avg_growth_pct"]) / (n_prev + 1), 1
+            )
+            prev["end_year"] = ph["end_year"]
         else:
             merged.append(ph)
     return merged
@@ -174,8 +179,12 @@ def piotroski_f_score(series: dict[str, Series]) -> dict | None:
         f"Operating cash flow of {_fmt_money(ocf.get(y))} in FY{y}" if y in ocf else "Insufficient data")
     add("Improving ROA", (r_y or 0) > (r_p or 0) if r_y is not None and r_p is not None else None,
         f"ROA moved from {r_p * 100:.1f}% to {r_y * 100:.1f}%" if r_y is not None and r_p is not None else "Insufficient data")
-    add("Cash flow exceeds net income", ocf.get(y, 0) > ni.get(y, 0) if y in ocf and y in ni else None,
-        "Earnings are backed by real cash (low accruals)" if ocf.get(y, 0) > ni.get(y, 0) else "Accruals exceed cash generation")
+    if y in ocf and y in ni:
+        _cf_ok = ocf[y] > ni[y]
+        _cf_detail = "Earnings are backed by real cash (low accruals)" if _cf_ok else "Accruals exceed cash generation"
+    else:
+        _cf_ok, _cf_detail = None, "Insufficient data"
+    add("Cash flow exceeds net income", _cf_ok, _cf_detail)
 
     if y in ltd and p in ltd and assets.get(y) and assets.get(p):
         lev_y, lev_p = ltd[y] / assets[y], ltd[p] / assets[p]
@@ -256,13 +265,16 @@ def altman_z_score(series: dict[str, Series], market_cap: float | None) -> dict 
         return None
     z = sum(weights[k] * v for k, v in available.items())
 
-    zone = "Safe" if z > 2.99 else ("Grey" if z >= 1.81 else "Distress")
+    complete = len(available) == 5
+    # Only classify zone against calibrated thresholds when all 5 components
+    # are present — a partial sum produces a meaninglessly low score.
+    zone = ("Safe" if z > 2.99 else ("Grey" if z >= 1.81 else "Distress")) if complete else "Incomplete"
     return {
         "score": round(z, 2),
         "zone": zone,
         "fiscal_year": y,
         "components": {k: round(v, 3) if v is not None else None for k, v in comp.items()},
-        "complete": len(available) == 5,
+        "complete": complete,
     }
 
 
@@ -450,6 +462,7 @@ def generate_insights(profile: dict, series: dict[str, Series], phases: list[dic
     # Cash flow
     ocf = series.get("ocf", [])
     capex = _as_map(series.get("capex", []))
+    ocf_m = _as_map(ocf)
     if ocf:
         pos = [p for p in ocf if p["value"] > 0]
         ins["cash_flow"].append(
@@ -463,7 +476,11 @@ def generate_insights(profile: dict, series: dict[str, Series], phases: list[dic
                 f"Free cash flow (operating cash flow minus capital expenditure) was "
                 f"{_fmt_money(latest_fcf[1])} in FY{latest_fcf[0]}."
             )
-    conv = [(r["year"], r["ocf_to_ni"]) for r in ratios if r.get("ocf_to_ni") is not None and r["ocf_to_ni"] > 0]
+    # Require OCF > 0 to exclude years where both OCF and NI are negative
+    # (negative ÷ negative = positive ratio, falsely implying earnings quality).
+    conv = [(r["year"], r["ocf_to_ni"]) for r in ratios
+            if r.get("ocf_to_ni") is not None and r["ocf_to_ni"] > 0
+            and ocf_m.get(r["year"], 0) > 0]
     if len(conv) >= 3:
         avg_conv = sum(c for _, c in conv) / len(conv)
         if avg_conv >= 1.1:
@@ -514,7 +531,7 @@ def generate_insights(profile: dict, series: dict[str, Series], phases: list[dic
                 first_div = paying_years[0]
                 ins["shareholder_returns"].append(
                     f"Dividends have been paid since at least {first_div['year']}, most recently "
-                    f"${divs[-1]['value']:.2f}/share/year."
+                    f"${paying_years[-1]['value']:.2f}/share/year."
                 )
                 if len(paying_years) >= 5:
                     d_cagr = _cagr(paying_years[0]["value"], paying_years[-1]["value"],
@@ -539,7 +556,8 @@ def generate_insights(profile: dict, series: dict[str, Series], phases: list[dic
             "Safe": "well clear of financial-distress territory",
             "Grey": "in the indeterminate 'grey zone' — not distressed, but worth monitoring",
             "Distress": "in the statistical distress zone; balance-sheet risk is elevated",
-        }[z["zone"]]
+            "Incomplete": "indeterminate — fewer than 5 components available for a full assessment",
+        }.get(z["zone"], "indeterminate")
         ins["health"].append(
             f"Altman Z-Score: {z['score']} (FY{z['fiscal_year']}) — {zone_text}."
         )
