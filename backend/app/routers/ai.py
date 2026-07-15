@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app import models, auth
 from app.database import get_db
 from app.routers.portfolio import _get_or_create_portfolio
-from app.services import market_data, claude
+from app.services import ai_guard, market_data, claude
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,38 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 def _ai_error_to_http(exc: Exception):
     if isinstance(exc, claude.AINotConfigured):
         raise HTTPException(503, "AI features are not configured on this server.")
+    # Subclass check first — AIRateLimited IS an AIRequestError. A provider
+    # rate limit that survives the client's retry budget becomes an honest
+    # 429 with Retry-After so the frontend can back off and retry, instead
+    # of the opaque 502 that used to break long analyst reports.
+    if isinstance(exc, claude.AIRateLimited):
+        raise HTTPException(
+            429,
+            "The AI service is busy right now. Please try again in a moment.",
+            headers={"Retry-After": str(exc.retry_after)},
+        )
     if isinstance(exc, claude.AIRequestError):
         raise HTTPException(502, "AI request failed. Please try again.")
     raise exc
+
+
+def _ai_user(
+    current_user: models.User = Depends(auth.get_current_user),
+) -> models.User:
+    """Auth + per-user daily AI budget, composed as one dependency.
+
+    The per-IP minute limiter in middleware.py stops bursts, but one account
+    rotating IPs (or spread across devices) could still drain the shared
+    Groq free-tier budget for everyone. This caps total AI calls per user
+    per UTC day.
+    """
+    if not ai_guard.daily_quota.check_and_increment(current_user.id):
+        raise HTTPException(
+            429,
+            "Daily AI usage limit reached. Your quota resets at midnight UTC.",
+            headers={"Retry-After": "3600"},
+        )
+    return current_user
 
 
 async def _user_holdings(current_user: models.User, db: Session) -> list[dict]:
@@ -44,7 +73,7 @@ async def _user_holdings(current_user: models.User, db: Session) -> list[dict]:
 @router.get("/daily-brief")
 async def daily_brief(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(_ai_user),
 ):
     holdings = await _user_holdings(current_user, db)
 
@@ -158,13 +187,24 @@ class ChartBar(BaseModel):
     v: float | None = None
 
 
+class NewsHeadline(BaseModel):
+    # Headlines come from the frontend, which got them from a third-party
+    # feed — treat them as untrusted twice over. A typed model (was
+    # list[dict[str, Any]]) means only the title ever reaches the prompt,
+    # bounded and fenced as data below.
+    title: str = Field(default="", max_length=300)
+
+    class Config:
+        extra = "ignore"
+
+
 class ChartAnalysisRequest(BaseModel):
-    ticker: str = Field(..., max_length=10)
-    range: str = Field(..., max_length=5)
-    price: float
-    change_pct: float
+    ticker: str = Field(..., max_length=10, pattern=r"^[A-Za-z0-9.\-^=]{1,10}$")
+    range: str = Field(..., max_length=5, pattern=r"^[A-Za-z0-9]{1,5}$")
+    price: float = Field(..., ge=0, le=10_000_000)
+    change_pct: float = Field(..., ge=-100_000, le=100_000)
     bars: list[ChartBar] = Field(default_factory=list, max_length=2000)
-    news: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+    news: list[NewsHeadline] = Field(default_factory=list, max_length=10)
 
 
 @router.post("/chart-analysis")
@@ -172,7 +212,7 @@ async def chart_analysis(
     body: ChartAnalysisRequest,
     # Every other /ai/* route requires auth; this one was anonymous, letting
     # any unauthenticated caller burn paid Claude API budget.
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(_ai_user),
 ):
     closes = [b.c for b in body.bars if b.c is not None]
     highs = [b.h for b in body.bars if b.h is not None] or closes
@@ -203,7 +243,12 @@ async def chart_analysis(
             else:
                 volume_note = "volume is in line with its recent average"
 
-    news_lines = "\n".join(f"- {n.get('title', '')}" for n in body.news[:5]) or "(no recent headlines)"
+    # Fence the third-party headlines as inert data (see ai_guard.PROMPT_GUARD)
+    # so a malicious headline can't inject instructions into the prompt.
+    titles = "\n".join(
+        f"- {ai_guard.sanitize_text(n.title, max_len=300)}" for n in body.news[:5] if n.title
+    )
+    news_lines = ai_guard.wrap_untrusted("recent headlines", titles) if titles else "(no recent headlines)"
 
     prompt = f"""Ticker: {body.ticker}
 Current price: ${body.price:.2f} ({'+' if body.change_pct >= 0 else ''}{body.change_pct:.2f}% today)
@@ -260,11 +305,21 @@ class EarningsBriefRequest(BaseModel):
     beat_history: str = Field(..., pattern=r"^[0-9]/[0-9]$")
 
 
+# The exact shape an earnings brief must have before it may be cached and
+# served to every user. Anything else (truncated JSON, model refusal,
+# hallucinated keys) is served once, uncached, and regenerated next time.
+_EARNINGS_BRIEF_KEYS = {
+    "analysts_expect": 1000,
+    "key_things_to_watch": 1000,
+    "historical_behavior": 600,
+}
+
+
 @router.post("/earnings-brief")
 async def earnings_brief(
     body: EarningsBriefRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(_ai_user),
 ):
     cached = (
         db.query(models.AIEarningsBrief)
@@ -303,16 +358,25 @@ Write a pre-earnings brief for a retail investor. Respond in pure JSON (no markd
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
-            brief = json.loads(text)
+            parsed = json.loads(text)
         except json.JSONDecodeError:
-            brief = {"raw": text}
+            parsed = None
 
-        db.add(models.AIEarningsBrief(
-            ticker=body.ticker.upper(),
-            earnings_date=body.earnings_date,
-            brief_json=json.dumps(brief),
-        ))
-        db.commit()
+        # Only a brief that matches the expected shape may enter the shared
+        # cache — a malformed generation used to be cached forever and served
+        # to every user who opened that earnings card.
+        brief = ai_guard.validate_ai_fields(
+            parsed, _EARNINGS_BRIEF_KEYS, require_all=True
+        )
+        if brief is not None:
+            db.add(models.AIEarningsBrief(
+                ticker=body.ticker.upper(),
+                earnings_date=body.earnings_date,
+                brief_json=json.dumps(brief),
+            ))
+            db.commit()
+        else:
+            brief = {"raw": ai_guard.sanitize_text(text, max_len=3000)}
         from_cache = False
 
     # Per-user position note — computed locally (deterministic, not cached/AI).
@@ -348,7 +412,7 @@ class ChatRequest(BaseModel):
 async def chat(
     body: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(_ai_user),
 ):
     holdings = await _user_holdings(current_user, db)
     holdings_lines = "\n".join(
@@ -378,10 +442,16 @@ User's watchlist: {watchlist_line}
 Today's market indices:
 {index_lines or '(unavailable)'}
 
-User is currently viewing: {body.current_page or 'unknown page'}"""
+User is currently viewing: {ai_guard.sanitize_text(body.current_page, max_len=100) or 'unknown page'}"""
 
-    messages = [{"role": m.role, "content": m.content} for m in body.history]
-    messages.append({"role": "user", "content": body.message})
+    # Bound the history to a character budget: 40 messages x 4,000 chars
+    # passes validation but far exceeds the Groq per-minute token limit, so
+    # long chat sessions were guaranteed to start failing. Newest-first
+    # trimming keeps the conversation working forever.
+    messages = ai_guard.trim_history(
+        [{"role": m.role, "content": m.content} for m in body.history]
+    )
+    messages.append({"role": "user", "content": ai_guard.sanitize_text(body.message, max_len=2000)})
 
     try:
         reply = await claude.ask_claude(system, messages, max_tokens=700)
@@ -427,6 +497,22 @@ _DEEP_SECTION_GROUPS = [
     ["analyst_consensus", "growth_outlook", "risk_factors", "arr_mrr_note"],
 ]
 
+# Whitelist + max length for every narrative field the frontend knows how to
+# render. Model output is validated against this before it leaves the server,
+# so a hallucinated or injected key can never reach the client.
+_NARRATIVE_KEYS = {
+    "investment_thesis": 8000,
+    "rating": 40,
+    "company_overview": 20000,
+    "financial_analysis": 20000,
+    "valuation_assessment": 20000,
+    "balance_sheet_health": 20000,
+    "analyst_consensus": 20000,
+    "growth_outlook": 20000,
+    "risk_factors": 20000,
+    "arr_mrr_note": 8000,
+}
+
 
 def _fmt_num(v, prefix="", suffix="", pct=False):
     if v is None:
@@ -445,7 +531,7 @@ def _fmt_num(v, prefix="", suffix="", pct=False):
 @router.post("/analyst-report")
 async def analyst_report(
     body: AnalystReportRequest,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(_ai_user),
 ):
     ticker = body.ticker.upper().strip()
     data = await market_data.get_analyst_report_data(ticker, body.timespan)
@@ -498,7 +584,7 @@ Analyst Consensus: {at['recommendation'] or 'N/A'} (score {at['score'] or 'N/A'}
 Price Targets: Low ${at['low'] or 'N/A'}, Mean ${at['mean'] or 'N/A'}, Median ${at['median'] or 'N/A'}, High ${at['high'] or 'N/A'}
 Number of Analysts: {at['num_analysts'] or 'N/A'}
 
-Company Description: {co['description'][:2000] if co['description'] else 'N/A'}
+Company Description: {ai_guard.wrap_untrusted("company description from data provider", co['description'][:2000]) if co['description'] else 'N/A'}
 
 Time span analyzed: {body.timespan}
 Report depth: {body.depth}
@@ -535,7 +621,7 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
         return json.loads(text)
 
     if body.depth == "deep":
-        narrative: dict[str, Any] = {}
+        raw_narrative: dict[str, Any] = {}
         for group in _DEEP_SECTION_GROUPS:
             keys_json = ", ".join(f'"{k}": "..."' for k in group)
             # Use data_context (not the full prompt) so the chunk instruction is
@@ -556,18 +642,26 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
                 _ai_error_to_http(exc)
             try:
                 chunk = _parse_ai_json(text)
-                narrative.update(chunk)
+                raw_narrative.update(chunk)
             except json.JSONDecodeError:
-                narrative.update({key: None for key in group})
+                raw_narrative.update({key: None for key in group})
+        narrative = ai_guard.validate_ai_fields(raw_narrative, _NARRATIVE_KEYS) or {}
     else:
         try:
             text = await claude.ask_claude_text(system, prompt, max_tokens=depth_cfg["max_tokens"])
         except Exception as exc:
             _ai_error_to_http(exc)
         try:
-            narrative = _parse_ai_json(text)
+            # Whitelist the parsed keys so only fields the UI knows how to
+            # render — at bounded lengths — ever reach the client.
+            narrative = ai_guard.validate_ai_fields(_parse_ai_json(text), _NARRATIVE_KEYS) or {}
         except json.JSONDecodeError:
-            narrative = {"raw": text}
+            narrative = {"raw": ai_guard.sanitize_text(text, max_len=40_000)}
+
+    # The rating drives a colour-coded badge in a trusted-looking UI element;
+    # constrain it to the three values the frontend understands.
+    if "rating" in narrative:
+        narrative["rating"] = ai_guard.normalize_rating(narrative.get("rating"))
 
     return {
         **data,

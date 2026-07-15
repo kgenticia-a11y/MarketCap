@@ -28,6 +28,8 @@ export default function AIChatWidget() {
       const status = (e as { response?: { status?: number } })?.response?.status;
       const content = status === 503
         ? "AI chat is not configured on this server."
+        : status === 429
+        ? "I'm getting a lot of requests right now — give me a moment and try again."
         : "Sorry, something went wrong. Please try again.";
       setMessages((prev) => [...prev, { role: "assistant", content }]);
     },

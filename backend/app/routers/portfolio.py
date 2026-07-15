@@ -12,7 +12,7 @@ from app import models, schemas, auth
 from app.config import settings
 from app.database import get_db
 from app.market_time import market_date
-from app.services import market_data, health_score, claude
+from app.services import ai_guard, market_data, health_score, claude
 
 logger = logging.getLogger(__name__)
 
@@ -305,11 +305,28 @@ def remove_item(
     db.commit()
 
 
+class AnalyzeHolding(BaseModel):
+    # Typed fields (was list[dict[str, Any]]) so free-form client text can't
+    # ride into the AI prompt — only these bounded fields ever reach it.
+    ticker: str = Field(default="?", max_length=12)
+    name: str = Field(default="?", max_length=100)
+    shares: float = Field(default=0, ge=0, le=1e9)
+    avg_buy_price: float = Field(default=0, ge=0, le=1e8)
+    current_price: float = Field(default=0, ge=0, le=1e8)
+    sector: str = Field(default="Unknown", max_length=60)
+    allocation_pct: float = Field(default=0, ge=-1000, le=1000)
+    pnl: float = Field(default=0, ge=-1e12, le=1e12)
+    pnl_pct: float = Field(default=0, ge=-100_000, le=100_000)
+
+    class Config:
+        extra = "ignore"
+
+
 class AnalyzeRequest(BaseModel):
-    holdings: list[dict[str, Any]] = Field(max_length=100)
+    holdings: list[AnalyzeHolding] = Field(max_length=100)
     risk_profile: dict[str, str] | None = None
-    total_value: float = 0
-    total_pnl_pct: float = 0
+    total_value: float = Field(default=0, ge=0, le=1e13)
+    total_pnl_pct: float = Field(default=0, ge=-100_000, le=100_000)
 
 
 @router.post("/analyze")
@@ -317,22 +334,32 @@ async def analyze_portfolio(
     body: AnalyzeRequest,
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    # Per-user daily AI budget — same backstop as the /ai/* endpoints (the
+    # dependency lives in ai.py, which imports this module, so the check is
+    # inlined here to avoid a circular import).
+    if not ai_guard.daily_quota.check_and_increment(current_user.id):
+        raise HTTPException(
+            429,
+            "Daily AI usage limit reached. Your quota resets at midnight UTC.",
+            headers={"Retry-After": "3600"},
+        )
+
     risk_ctx = ""
     if body.risk_profile:
         rp = body.risk_profile
         risk_ctx = (
-            f"\nInvestor profile: horizon={rp.get('horizon','unknown')}, "
-            f"risk_tolerance={rp.get('tolerance','unknown')}, "
-            f"goal={rp.get('goal','unknown')}."
+            f"\nInvestor profile: horizon={ai_guard.sanitize_text(rp.get('horizon'), max_len=40) or 'unknown'}, "
+            f"risk_tolerance={ai_guard.sanitize_text(rp.get('tolerance'), max_len=40) or 'unknown'}, "
+            f"goal={ai_guard.sanitize_text(rp.get('goal'), max_len=40) or 'unknown'}."
         )
 
     holdings_lines = "\n".join(
-        f"- {h.get('ticker','?')} ({h.get('name','?')}): "
-        f"{h.get('shares',0)} shares @ ${h.get('avg_buy_price',0):.2f} avg cost, "
-        f"current ${h.get('current_price',0):.2f}, "
-        f"sector={h.get('sector','Unknown')}, "
-        f"weight={h.get('allocation_pct',0):.1f}%, "
-        f"P&L {'+' if h.get('pnl',0)>=0 else ''}{h.get('pnl',0):.2f} ({'+' if h.get('pnl_pct',0)>=0 else ''}{h.get('pnl_pct',0):.1f}%)"
+        f"- {ai_guard.sanitize_text(h.ticker, max_len=12) or '?'} ({ai_guard.sanitize_text(h.name, max_len=100) or '?'}): "
+        f"{h.shares} shares @ ${h.avg_buy_price:.2f} avg cost, "
+        f"current ${h.current_price:.2f}, "
+        f"sector={ai_guard.sanitize_text(h.sector, max_len=60) or 'Unknown'}, "
+        f"weight={h.allocation_pct:.1f}%, "
+        f"P&L {'+' if h.pnl >= 0 else ''}{h.pnl:.2f} ({'+' if h.pnl_pct >= 0 else ''}{h.pnl_pct:.1f}%)"
         for h in body.holdings
     )
 
@@ -365,6 +392,12 @@ Respond in the following JSON structure (no markdown, pure JSON):
         )
     except claude.AINotConfigured:
         raise HTTPException(503, "AI analysis is not configured on this server.")
+    except claude.AIRateLimited as exc:
+        raise HTTPException(
+            429,
+            "The AI service is busy right now. Please try again in a moment.",
+            headers={"Retry-After": str(exc.retry_after)},
+        )
     except claude.AIRequestError:
         raise HTTPException(502, "AI analysis request failed.")
 

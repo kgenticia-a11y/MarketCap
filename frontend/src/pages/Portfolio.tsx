@@ -864,6 +864,8 @@ function AIAnalysisPanel({
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status === 503) {
         setError("AI analysis is not configured on this server. Contact your administrator.");
+      } else if (status === 429) {
+        setError("The AI service is busy or you've reached today's AI usage limit. Please try again in a moment.");
       } else if (status === 502) {
         setError("AI service returned an error. Please try again later.");
       } else {

@@ -173,7 +173,14 @@ export default function AnalystReport() {
 
   const mutation = useMutation({
     mutationFn: () => getAnalystReport({ ticker: selected!.ticker, timespan, depth }),
-    onError: () => toast.error("Failed to generate report. Please try again."),
+    onError: (err: any) => {
+      const status = err?.response?.status;
+      toast.error(
+        status === 429
+          ? "The AI service is busy or you've reached today's AI usage limit. Please try again in a moment."
+          : "Failed to generate report. Please try again.",
+      );
+    },
   });
 
   const docsMutation = useMutation({
