@@ -207,4 +207,23 @@ class AuthRateLimiter(BaseHTTPMiddleware):
             del self._hits[key]
 
         self._hits[key].append(now)
+
+        # Full GC sweep every _GC_EVERY calls: expire all stale entries across
+        # every key so IPs that hit once and disappear don't accumulate forever.
+        self._calls_since_gc += 1
+        if self._calls_since_gc >= self._GC_EVERY:
+            self._calls_since_gc = 0
+            sweep_now = time.monotonic()
+            rule_windows = {(r[0], r[1]): r[3] for r in self.rules}
+            dead = []
+            for k, dq in list(self._hits.items()):
+                win = rule_windows.get((k[1], k[2]), window_sec)
+                cutoff_k = sweep_now - win
+                while dq and dq[0] < cutoff_k:
+                    dq.popleft()
+                if not dq:
+                    dead.append(k)
+            for k in dead:
+                self._hits.pop(k, None)
+
         return await call_next(request)
