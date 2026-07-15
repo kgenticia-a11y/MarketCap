@@ -13,6 +13,7 @@ module makes at most 3 requests per report and caches the heavy payloads.
 import asyncio
 import logging
 import time
+from datetime import date as _date
 
 import certifi
 import httpx
@@ -44,10 +45,18 @@ async def _get_json(url: str, timeout: float = 30.0) -> dict:
 async def get_cik(ticker: str) -> int | None:
     """Resolve a ticker to its SEC CIK number. Returns None if unknown."""
     global _ticker_map, _ticker_map_ts
+    # Check while holding the lock; serve from cache without fetching.
     async with _ticker_map_lock:
+        if _ticker_map and time.time() - _ticker_map_ts <= _TICKER_MAP_TTL:
+            return _ticker_map.get(ticker.upper())
+    # Cache is stale — fetch the 2 MB map WITHOUT holding the lock so concurrent
+    # CIK lookups don't block for the full network round-trip (up to 30 s).
+    data = await _get_json("https://www.sec.gov/files/company_tickers.json")
+    new_map = {v["ticker"].upper(): int(v["cik_str"]) for v in data.values()}
+    async with _ticker_map_lock:
+        # Guard against a parallel fetch that may have already refreshed.
         if not _ticker_map or time.time() - _ticker_map_ts > _TICKER_MAP_TTL:
-            data = await _get_json("https://www.sec.gov/files/company_tickers.json")
-            _ticker_map = {v["ticker"].upper(): int(v["cik_str"]) for v in data.values()}
+            _ticker_map = new_map
             _ticker_map_ts = time.time()
     return _ticker_map.get(ticker.upper())
 
@@ -143,11 +152,20 @@ def _annual_points(tag_data: dict, kind: str, unit: str = "USD") -> dict[int, fl
                 start = f.get("start", "")
                 if not start:
                     continue
-                # ~annual span (330-400 days) — excludes quarterly facts
-                y0, m0, d0 = (int(x) for x in start.split("-"))
-                y1, m1, d1 = (int(x) for x in end.split("-"))
-                span_days = (y1 - y0) * 365 + (m1 - m0) * 30 + (d1 - d0)
-                if not (330 <= span_days <= 400):
+                # ~annual span (330-370 days) — excludes quarterly facts and
+                # 13-month fiscal-year transitions (10-KT). Use real date
+                # arithmetic; the month*30 approximation accepted 13-month spans.
+                try:
+                    y0, m0, d0 = (int(x) for x in start.split("-"))
+                    y1, m1, d1 = (int(x) for x in end.split("-"))
+                    span_days = (_date(y1, m1, d1) - _date(y0, m0, d0)).days
+                except ValueError:
+                    continue
+                # 330–380: accepts standard 52-week years (364–366 d) AND
+                # 53-week fiscal years (371–372 d, e.g. Walmart/Target).
+                # Anything outside this range is a quarter or a 13-month
+                # transition period (10-KT) and is excluded.
+                if not (330 <= span_days <= 380):
                     continue
             else:
                 if form not in ("10-K", "10-K/A", "20-F"):
@@ -185,8 +203,15 @@ def extract_annual_series(facts: dict) -> dict[str, list[dict]]:
         for tag in tags:
             if tag not in gaap:
                 continue
-            for year, val in _annual_points(gaap[tag], _DURATION, unit=unit).items():
+            points = _annual_points(gaap[tag], _DURATION, unit=unit)
+            if not points:
+                continue
+            for year, val in points.items():
                 merged.setdefault(year, val)
+            # Use only the first tag that has data — do not mix diluted and
+            # basic share counts across years (diluted > basic, so blending
+            # across tag boundaries produces spurious dilution signals).
+            break
         out[name] = [{"year": y, "value": merged[y]} for y in sorted(merged)]
 
     return out

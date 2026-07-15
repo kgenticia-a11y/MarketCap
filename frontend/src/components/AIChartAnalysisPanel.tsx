@@ -39,7 +39,11 @@ export default function AIChartAnalysisPanel({ ticker, range, price, changePct, 
       setAnalysis(result);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
-      setError(status === 503 ? "AI analysis is not configured on this server." : "Chart analysis failed. Please try again.");
+      setError(
+        status === 503 ? "AI analysis is not configured on this server."
+        : status === 429 ? "The AI service is busy right now. Please try again in a moment."
+        : "Chart analysis failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
