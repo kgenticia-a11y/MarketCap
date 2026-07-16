@@ -74,11 +74,24 @@ class Settings(BaseSettings):
     # publicly exposed on the live server.
     is_production: bool = False
 
-    # Groq API key (free tier) — powers all AI co-pilot features via Meta
-    # Llama 3.3 70B: portfolio analysis, daily brief, chart analysis,
-    # earnings briefs, and the app-wide chat assistant. Get a free key at
-    # https://console.groq.com. Endpoints return 503 until this is set.
+    # Groq API key (free tier) — powers all AI co-pilot features: portfolio
+    # analysis, daily brief, chart analysis, earnings briefs, and the
+    # app-wide chat assistant. Get a free key at https://console.groq.com.
+    # Endpoints return 503 until this is set.
     groq_api_key: str = ""
+
+    # Preferred Groq model ID. Empty = use the built-in fallback chain in
+    # services/claude.py. Setting this lets ops migrate off a deprecated
+    # model with a config change instead of a code deploy; if the provider
+    # reports the configured model as decommissioned, the client still
+    # falls back to the built-in chain automatically.
+    groq_model: str = ""
+
+    # Preferred Groq model ID for DEEP analysis work (standard / deep-dive
+    # analyst reports). Empty = use the built-in deep-tier chain in
+    # services/claude.py, which prefers the largest reasoning-capable model.
+    # Same fallback semantics as groq_model.
+    groq_deep_model: str = ""
 
     class Config:
         env_file = ".env"

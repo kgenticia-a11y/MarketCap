@@ -471,46 +471,84 @@ class AnalystReportRequest(BaseModel):
     depth: str = Field(default="standard", pattern=r"^(brief|standard|deep)$")
 
 
+# Report length is expressed to the model as countable printed pages
+# (~500 words per page), so each depth lands inside its advertised page
+# range and never past its ceiling. Brief runs on the fast default model;
+# standard and deep are AI-written long-form research, so both route to the
+# deep model tier (claude.py: largest reasoning model, high reasoning
+# effort, extended timeout). Deep dive is deliberately budgeted far above
+# every other choice — one generation per major section instead of grouped
+# sections, with several times the per-section word target.
 _DEPTH_CONFIG = {
     "brief": {
-        "instruction": "Write 1-2 sentences per section. Be concise — key takeaway only.",
-        "max_tokens": 1200,
+        "pages": (1, 3),
+        "instruction": (
+            "Total report length: 1-3 printed pages (roughly 500-1,500 words across the whole "
+            "report, at ~500 words per page). Write 1-3 tight sentences per section — key "
+            "takeaway only. Never exceed 3 pages."
+        ),
+        "max_tokens": 2000,
+        "tier": "default",
+        "section_groups": None,  # single generation
     },
     "standard": {
-        "instruction": "Write 1-2 paragraphs per section with supporting data points.",
-        "max_tokens": 2500,
+        "pages": (10, 15),
+        "instruction": (
+            "Total report length: 10-15 printed pages (roughly 5,000-7,500 words across the "
+            "whole report, at ~500 words per page). Write 2-4 substantial paragraphs "
+            "(roughly 550-800 words) per major section, with supporting data points drawn "
+            "from the figures provided. Never exceed 15 pages."
+        ),
+        "max_tokens": 3400,  # per chunk × 3 chunks
+        "tier": "deep",
+        "section_groups": [
+            ["investment_thesis", "rating", "company_overview"],
+            ["financial_analysis", "valuation_assessment", "balance_sheet_health"],
+            ["analyst_consensus", "growth_outlook", "risk_factors", "arr_mrr_note"],
+        ],
     },
     "deep": {
+        "pages": (35, 45),
         "instruction": (
-            "Write 3-5 paragraphs per section. Include peer comparisons, historical context, "
-            "granular segment analysis, scenario modeling, and DCF sensitivity discussion where "
-            "applicable. Add sub-sections for competitive landscape and segment breakdown."
+            "Total report length: 35-45 printed pages (roughly 17,500-22,500 words across the "
+            "whole report, at ~500 words per page) — this is the deep-dive tier and must carry "
+            "far more information than any other report depth. Write 6-10 detailed paragraphs "
+            "(roughly 1,900-2,400 words) per major section. Include peer comparisons, "
+            "historical context, granular segment analysis, scenario modeling (bull / base / "
+            "bear), and DCF sensitivity discussion where applicable. Add sub-sections for "
+            "competitive landscape and segment breakdown. Never exceed 45 pages."
         ),
-        # Per-chunk limit: 3 chunks × 2000 = 6000 tokens total, within Groq free-tier TPM.
-        "max_tokens": 2000,
+        "max_tokens": 6000,  # per chunk × 9 chunks; headroom for reasoning tokens
+        "tier": "deep",
+        "section_groups": [
+            ["investment_thesis", "rating"],
+            ["company_overview"],
+            ["financial_analysis"],
+            ["valuation_assessment"],
+            ["balance_sheet_health"],
+            ["analyst_consensus"],
+            ["growth_outlook"],
+            ["risk_factors"],
+            ["arr_mrr_note"],
+        ],
     },
 }
 
-_DEEP_SECTION_GROUPS = [
-    ["investment_thesis", "rating", "company_overview"],
-    ["financial_analysis", "valuation_assessment", "balance_sheet_health"],
-    ["analyst_consensus", "growth_outlook", "risk_factors", "arr_mrr_note"],
-]
-
 # Whitelist + max length for every narrative field the frontend knows how to
 # render. Model output is validated against this before it leaves the server,
-# so a hallucinated or injected key can never reach the client.
+# so a hallucinated or injected key can never reach the client. Caps are sized
+# for deep-dive output (~2,400 words ≈ 15K chars per section, plus headroom).
 _NARRATIVE_KEYS = {
-    "investment_thesis": 8000,
+    "investment_thesis": 20000,
     "rating": 40,
-    "company_overview": 20000,
-    "financial_analysis": 20000,
-    "valuation_assessment": 20000,
-    "balance_sheet_health": 20000,
-    "analyst_consensus": 20000,
-    "growth_outlook": 20000,
-    "risk_factors": 20000,
-    "arr_mrr_note": 8000,
+    "company_overview": 24000,
+    "financial_analysis": 24000,
+    "valuation_assessment": 24000,
+    "balance_sheet_health": 24000,
+    "analyst_consensus": 24000,
+    "growth_outlook": 24000,
+    "risk_factors": 24000,
+    "arr_mrr_note": 12000,
 }
 
 
@@ -620,9 +658,13 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         return json.loads(text)
 
-    if body.depth == "deep":
+    if depth_cfg["section_groups"]:
+        # Chunked long-form generation (standard + deep dive): one deep-tier
+        # model call per section group, so the total output can reach the
+        # depth's page budget without any single generation blowing the
+        # provider's per-request output limit.
         raw_narrative: dict[str, Any] = {}
-        for group in _DEEP_SECTION_GROUPS:
+        for group in depth_cfg["section_groups"]:
             keys_json = ", ".join(f'"{k}": "..."' for k in group)
             # Use data_context (not the full prompt) so the chunk instruction is
             # the only output-format directive the model sees — avoids a
@@ -636,7 +678,10 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
             )
             try:
                 text = await claude.ask_claude_text(
-                    system, chunk_prompt, max_tokens=depth_cfg["max_tokens"]
+                    system,
+                    chunk_prompt,
+                    max_tokens=depth_cfg["max_tokens"],
+                    tier=depth_cfg["tier"],
                 )
             except Exception as exc:
                 _ai_error_to_http(exc)
@@ -648,7 +693,12 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
         narrative = ai_guard.validate_ai_fields(raw_narrative, _NARRATIVE_KEYS) or {}
     else:
         try:
-            text = await claude.ask_claude_text(system, prompt, max_tokens=depth_cfg["max_tokens"])
+            text = await claude.ask_claude_text(
+                system,
+                prompt,
+                max_tokens=depth_cfg["max_tokens"],
+                tier=depth_cfg["tier"],
+            )
         except Exception as exc:
             _ai_error_to_http(exc)
         try:
@@ -669,5 +719,6 @@ Respond in pure JSON (no markdown fences). Return exactly these keys:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "timespan": body.timespan,
         "depth": body.depth,
+        "target_pages": "{}-{}".format(*depth_cfg["pages"]),
         "disclaimer": "AI-generated analysis for informational purposes only. Not financial advice.",
     }

@@ -18,8 +18,8 @@ import { toast } from "sonner";
 const TIMESPANS = ["1M", "6M", "1Y", "5Y"] as const;
 const DEPTHS = [
   { key: "brief", label: "Executive Brief", pages: "1–3 pages", desc: "Concise summary for quick decisions" },
-  { key: "standard", label: "Standard Report", pages: "10–15 pages", desc: "Full institutional-format analysis" },
-  { key: "deep", label: "Deep Dive", pages: "35–45 pages", desc: "Comprehensive research with peer comparisons" },
+  { key: "standard", label: "Standard Report", pages: "10–15 pages", desc: "Full institutional-format analysis, written by a deeper AI model" },
+  { key: "deep", label: "Deep Dive", pages: "35–45 pages", desc: "Deeper AI model, section by section — far more detail than any other depth: peer comparisons, scenarios, segment analysis" },
 ] as const;
 
 interface SearchResult { ticker: string; name: string }
@@ -160,7 +160,7 @@ const MODES = [
   {
     key: "ai",
     label: "AI Narrative Report",
-    desc: "Institutional-format report with narrative written by Meta Llama",
+    desc: "Institutional-format report with AI-written narrative",
   },
 ] as const;
 
@@ -395,7 +395,7 @@ export default function AnalystReport() {
 
       children.push(
         new Paragraph({ spacing: { before: 400 }, children: [new TextRun({ text: report.disclaimer || "", italics: true, size: 18, color: "999999" })] }),
-        new Paragraph({ children: [new TextRun({ text: "Powered by Meta Llama", size: 18, color: "999999" })] }),
+        new Paragraph({ children: [new TextRun({ text: "Powered by AI", size: 18, color: "999999" })] }),
       );
 
       const doc = new Document({
@@ -528,7 +528,11 @@ export default function AnalystReport() {
           <p className="text-xs text-muted/60">
             {mode === "docs"
               ? "Pulling SEC filings, reading the full financial history, computing analysis"
-              : "Fetching market data, financials, and generating AI narrative"}
+              : depth === "deep"
+                ? "Running the deep AI model section by section for a 35–45 page report — this can take several minutes"
+                : depth === "standard"
+                  ? "Running the deep AI model for a 10–15 page report — this can take a couple of minutes"
+                  : "Fetching market data, financials, and generating AI narrative"}
           </p>
         </div>
       )}
@@ -802,7 +806,7 @@ export default function AnalystReport() {
             {/* Footer */}
             <div className="bg-surface rounded-xl border border-border p-4 space-y-1">
               <p className="text-xs text-muted">{report.disclaimer}</p>
-              <p className="text-xs text-muted/60">Powered by Meta Llama | Generated {new Date(report.generated_at).toLocaleString()}</p>
+              <p className="text-xs text-muted/60">Powered by AI | Generated {new Date(report.generated_at).toLocaleString()}</p>
             </div>
           </div>
         </>

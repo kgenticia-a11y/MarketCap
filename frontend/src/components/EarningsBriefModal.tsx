@@ -46,7 +46,7 @@ export default function EarningsBriefModal({ company, date, onClose }: Props) {
             </div>
             <div>
               <p className="text-sm font-bold text-white">{company.ticker} Earnings Brief</p>
-              <p className="text-[10px] text-muted">Powered by Meta Llama</p>
+              <p className="text-[10px] text-muted">Powered by AI</p>
             </div>
           </div>
           <button onClick={onClose} className="text-muted hover:text-white transition-colors">
