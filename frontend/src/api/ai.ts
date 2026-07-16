@@ -3,10 +3,16 @@ import client from "./client";
 // AI endpoints run a full LLM generation server-side (plus retries on
 // provider rate limits), so they legitimately take longer than the client's
 // default 30s ceiling. Each call sets its own timeout: without this, the
-// browser aborted deep analyst reports (3 sequential generations + market
-// data gathering) while the backend was still happily working.
+// browser aborted deep analyst reports while the backend was still happily
+// working. Analyst-report timeouts scale with depth — standard runs 3
+// sequential deep-model generations, and a deep dive runs 9 (one per major
+// section, ~35-45 pages total), so those get progressively longer ceilings.
 const AI_TIMEOUT_MS = 60_000;
-const REPORT_TIMEOUT_MS = 180_000;
+const REPORT_TIMEOUT_MS: Record<string, number> = {
+  brief: 120_000,
+  standard: 480_000,
+  deep: 900_000,
+};
 
 export const getDailyBrief = () =>
   client.get("/ai/daily-brief", { timeout: AI_TIMEOUT_MS }).then((r) => r.data);
@@ -51,4 +57,9 @@ export const getAnalystReport = (payload: {
   ticker: string;
   timespan: string;
   depth: string;
-}) => client.post("/ai/analyst-report", payload, { timeout: REPORT_TIMEOUT_MS }).then((r) => r.data);
+}) =>
+  client
+    .post("/ai/analyst-report", payload, {
+      timeout: REPORT_TIMEOUT_MS[payload.depth] ?? REPORT_TIMEOUT_MS.standard,
+    })
+    .then((r) => r.data);

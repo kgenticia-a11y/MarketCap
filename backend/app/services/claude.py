@@ -51,11 +51,25 @@ _DEFAULT_MODEL_CHAIN = [
     "llama-3.3-70b-versatile",
 ]
 
+# Deep-tier chain, used for long-form analysis work (standard / deep-dive
+# analyst reports). Ordered by reasoning depth rather than speed: the small
+# gpt-oss-20b never appears here, so a deep report can only ever be produced
+# by one of the large models. GROQ_DEEP_MODEL overrides the primary.
+_DEEP_MODEL_CHAIN = [
+    "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "qwen/qwen3.6-27b",
+]
 
-def _model_candidates() -> list[str]:
-    """GROQ_MODEL (if set) first, then the default chain, deduplicated."""
-    chain = [settings.groq_model.strip()] if settings.groq_model.strip() else []
-    for m in _DEFAULT_MODEL_CHAIN:
+
+def _model_candidates(tier: str = "default") -> list[str]:
+    """Configured override (if set) first, then the tier's chain, deduplicated."""
+    if tier == "deep":
+        override, base = settings.groq_deep_model, _DEEP_MODEL_CHAIN
+    else:
+        override, base = settings.groq_model, _DEFAULT_MODEL_CHAIN
+    chain = [override.strip()] if override.strip() else []
+    for m in base:
         if m not in chain:
             chain.append(m)
     return chain
@@ -69,9 +83,9 @@ _dead_models: set[str] = set()
 _dead_models_lock = threading.Lock()
 
 
-def _active_model() -> str:
+def _active_model(tier: str = "default") -> str:
     with _dead_models_lock:
-        for m in _model_candidates():
+        for m in _model_candidates(tier):
             if m not in _dead_models:
                 return m
         # Every candidate has been marked dead — reset and start over rather
@@ -81,7 +95,7 @@ def _active_model() -> str:
             "fallback chain and retrying from the top."
         )
         _dead_models.clear()
-        return _model_candidates()[0]
+        return _model_candidates(tier)[0]
 
 
 def _mark_model_dead(model: str) -> None:
@@ -111,6 +125,11 @@ def _is_model_unavailable(exc: Exception) -> bool:
 # Hard per-request timeout. Groq normally answers in a few seconds; anything
 # past this is a hung connection, not a slow generation.
 _REQUEST_TIMEOUT_SEC = 45.0
+
+# Deep-tier requests run the largest model at high reasoning effort with
+# multi-thousand-token outputs, so a legitimate generation can take well
+# past the default ceiling.
+_DEEP_REQUEST_TIMEOUT_SEC = 150.0
 
 # Bounded retry policy for transient failures. The waits are short on purpose:
 # these run inside a user-facing HTTP request, so we retry what resolves fast
@@ -180,6 +199,7 @@ async def ask_claude(
     system: str,
     messages: list[dict[str, str]],
     max_tokens: int = 1024,
+    tier: str = "default",
 ) -> str:
     """Send a system prompt + conversation turns to the AI model, return the text reply.
 
@@ -187,6 +207,11 @@ async def ask_claude(
     Uses Groq's OpenAI-compatible chat completions API. The model is chosen
     from the fallback chain above; a decommissioned model is skipped
     automatically on the same request.
+
+    `tier="deep"` routes the request to the deep-analysis chain: the largest
+    reasoning-capable model, high reasoning effort where the model supports
+    it, and an extended timeout. Used by long-form work like standard and
+    deep-dive analyst reports.
     """
     if not settings.groq_api_key:
         raise AINotConfigured()
@@ -196,6 +221,10 @@ async def ask_claude(
     except ImportError as exc:
         raise AIRequestError("Groq SDK not installed.") from exc
 
+    if tier == "deep":
+        # Per-request timeout override; the shared client keeps its default.
+        client = client.with_options(timeout=_DEEP_REQUEST_TIMEOUT_SEC)
+
     api_messages: list[dict[str, str]] = [
         {"role": "system", "content": system + ai_guard.PROMPT_GUARD}
     ]
@@ -204,13 +233,20 @@ async def ask_claude(
     attempt = 0          # transient failures (rate limit / 5xx / network)
     model_swaps = 0      # decommissioned-model fallbacks — bounded separately
     while True:
-        model = _active_model()
+        model = _active_model(tier)
+        request_kwargs: dict = {
+            "model": model,
+            "messages": api_messages,
+            "max_tokens": max_tokens,
+        }
+        # Only the gpt-oss family accepts reasoning_effort on Groq; sending
+        # it to other models is a 400.
+        if tier == "deep" and model.startswith("openai/gpt-oss"):
+            request_kwargs["reasoning_effort"] = "high"
         try:
             response = await asyncio.to_thread(
                 client.chat.completions.create,
-                model=model,
-                messages=api_messages,
-                max_tokens=max_tokens,
+                **request_kwargs,
             )
             break
         except Exception as exc:
@@ -223,13 +259,13 @@ async def ask_claude(
             if _is_model_unavailable(exc):
                 _mark_model_dead(model)
                 model_swaps += 1
-                if model_swaps >= len(_model_candidates()):
+                if model_swaps >= len(_model_candidates(tier)):
                     logger.error("Every AI model candidate is unavailable: %s", exc)
                     raise AIRequestError(f"No available AI model: {exc}") from exc
                 logger.error(
                     "AI model %r reported unavailable by provider (status=%s) — "
                     "falling back to %r. Update GROQ_MODEL to silence this.",
-                    model, status, _active_model(),
+                    model, status, _active_model(tier),
                 )
                 continue
 
@@ -261,6 +297,10 @@ async def ask_claude(
     return text
 
 
-async def ask_claude_text(system: str, prompt: str, max_tokens: int = 1024) -> str:
+async def ask_claude_text(
+    system: str, prompt: str, max_tokens: int = 1024, tier: str = "default"
+) -> str:
     """Convenience wrapper for single-turn (non-chat) prompts."""
-    return await ask_claude(system, [{"role": "user", "content": prompt}], max_tokens)
+    return await ask_claude(
+        system, [{"role": "user", "content": prompt}], max_tokens, tier=tier
+    )

@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     # falls back to the built-in chain automatically.
     groq_model: str = ""
 
+    # Preferred Groq model ID for DEEP analysis work (standard / deep-dive
+    # analyst reports). Empty = use the built-in deep-tier chain in
+    # services/claude.py, which prefers the largest reasoning-capable model.
+    # Same fallback semantics as groq_model.
+    groq_deep_model: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"   # silently ignore leftover keys

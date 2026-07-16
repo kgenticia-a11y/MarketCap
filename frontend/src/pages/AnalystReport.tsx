@@ -18,8 +18,8 @@ import { toast } from "sonner";
 const TIMESPANS = ["1M", "6M", "1Y", "5Y"] as const;
 const DEPTHS = [
   { key: "brief", label: "Executive Brief", pages: "1–3 pages", desc: "Concise summary for quick decisions" },
-  { key: "standard", label: "Standard Report", pages: "10–15 pages", desc: "Full institutional-format analysis" },
-  { key: "deep", label: "Deep Dive", pages: "35–45 pages", desc: "Comprehensive research with peer comparisons" },
+  { key: "standard", label: "Standard Report", pages: "10–15 pages", desc: "Full institutional-format analysis, written by a deeper AI model" },
+  { key: "deep", label: "Deep Dive", pages: "35–45 pages", desc: "Deeper AI model, section by section — far more detail than any other depth: peer comparisons, scenarios, segment analysis" },
 ] as const;
 
 interface SearchResult { ticker: string; name: string }
@@ -528,7 +528,11 @@ export default function AnalystReport() {
           <p className="text-xs text-muted/60">
             {mode === "docs"
               ? "Pulling SEC filings, reading the full financial history, computing analysis"
-              : "Fetching market data, financials, and generating AI narrative"}
+              : depth === "deep"
+                ? "Running the deep AI model section by section for a 35–45 page report — this can take several minutes"
+                : depth === "standard"
+                  ? "Running the deep AI model for a 10–15 page report — this can take a couple of minutes"
+                  : "Fetching market data, financials, and generating AI narrative"}
           </p>
         </div>
       )}
