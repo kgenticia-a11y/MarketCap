@@ -119,27 +119,6 @@ async def daily_brief(
                                 f"${comp['eps_actual_prev']:.2f} last quarter, beat history {comp['beat_history']}"
                             )
 
-    # Alerts: triggered or within 2% of target.
-    alerts = db.query(models.PriceAlert).filter(models.PriceAlert.user_id == current_user.id).all()
-    alert_lines = []
-    if alerts:
-        quotes = await asyncio.gather(
-            *[market_data.get_quote(a.ticker) for a in alerts], return_exceptions=True
-        )
-        for alert, quote in zip(alerts, quotes):
-            if isinstance(quote, Exception):
-                continue
-            price = quote["price"]
-            distance_pct = abs(price - alert.target_price) / alert.target_price * 100
-            triggered = (
-                (alert.condition == "above" and price >= alert.target_price) or
-                (alert.condition == "below" and price <= alert.target_price)
-            )
-            if triggered:
-                alert_lines.append(f"- {alert.ticker} alert TRIGGERED: price ${price:.2f} is {alert.condition} ${alert.target_price:.2f}")
-            elif distance_pct <= 2:
-                alert_lines.append(f"- {alert.ticker} alert near threshold: price ${price:.2f}, target ${alert.target_price:.2f} ({alert.condition})")
-
     prompt = f"""Today's market conditions:
 {index_lines or '(no index data)'}
 
@@ -154,14 +133,11 @@ Overall return since first buy: {'+' if total_pnl_pct >= 0 else ''}{total_pnl_pc
 Upcoming earnings (next 7 days) for held tickers:
 {chr(10).join(earnings_lines) or '(none)'}
 
-Price alerts:
-{chr(10).join(alert_lines) or '(none triggered or near threshold)'}
-
 Write a 3-5 sentence daily brief in plain English, in this order:
 1. One sentence market summary.
 2. One sentence on how the user's portfolio is performing relative to the market.
 3. One to two sentences on one specific thing to pay attention to today (an earnings report, catalyst, or volatility). If there are no holdings or earnings, point out a notable market mover instead.
-4. One optional sentence suggesting something concrete (diversification, rebalancing, or setting an alert).
+4. One optional sentence suggesting something concrete (diversification or rebalancing).
 Do not use markdown, headers, or bullet points — write flowing prose. Do not pad with disclaimers."""
 
     try:

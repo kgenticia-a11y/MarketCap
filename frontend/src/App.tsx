@@ -50,7 +50,6 @@ function AppRoutes() {
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
       <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
-      <Route path="/alerts"   element={<Navigate to="/?tab=alerts" replace />} />
       <Route path="/analyst-report" element={<Private title="Analyst Report"><AnalystReport /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}

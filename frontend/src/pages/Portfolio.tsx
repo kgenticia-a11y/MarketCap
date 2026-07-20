@@ -14,10 +14,9 @@ import { useTheme } from "../context/ThemeContext";
 import {
   Trash2, Briefcase, TrendingUp, TrendingDown, DollarSign,
   Plus, Pencil, Check, X, Download, Brain, AlertTriangle,
-  Globe, Activity, Shield, ChevronDown, ChevronUp, BarChart3, Bell,
+  Globe, Activity, Shield, ChevronDown, ChevronUp, BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
-import AlertModal from "../components/AlertModal";
 import { clsx } from "clsx";
 import {
   PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -1070,7 +1069,7 @@ function AnalyticsPanel({ riskProfile, accountId }: { riskProfile: RiskProfile |
 }
 
 /* ── Holdings table row ────────────────────────────────────────────────── */
-function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct, showAccount }: { item: PortfolioItem; onCreateAlert: (ticker: string) => void; dividendInfo?: { dividend_yield: number; annual_dividend_income: number }; spyChangePct: number | null; showAccount?: boolean }) {
+function PortfolioRow({ item, dividendInfo, spyChangePct, showAccount }: { item: PortfolioItem; dividendInfo?: { dividend_yield: number; annual_dividend_income: number }; spyChangePct: number | null; showAccount?: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [editShares, setEditShares] = useState(String(item.shares));
@@ -1200,7 +1199,6 @@ function PortfolioRow({ item, onCreateAlert, dividendInfo, spyChangePct, showAcc
       <td className="py-3 px-5 text-right">
         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button onClick={() => setEditing(true)} className="text-muted hover:text-white transition-colors"><Pencil size={13} /></button>
-          <button onClick={() => onCreateAlert(item.ticker)} title="Create alert" className="text-muted hover:text-amber-400 transition-colors"><Bell size={13} /></button>
           <button onClick={() => del.mutate()} disabled={del.isPending} className="text-muted hover:text-negative transition-colors"><Trash2 size={13} /></button>
         </div>
       </td>
@@ -1270,7 +1268,6 @@ export default function Portfolio() {
   const qc = useQueryClient();
   const [riskProfile, setRiskProfile] = useState<RiskProfile | null>(getRiskProfile);
   const [showRiskModal, setShowRiskModal] = useState(false);
-  const [alertTicker, setAlertTicker] = useState<string | null>(null);
   // null = aggregate "All Accounts" view; otherwise filter to that account.
   const [accountId, setAccountId] = useState<number | null>(null);
 
@@ -1357,10 +1354,6 @@ export default function Portfolio() {
         <RiskProfileModal onSave={saveRiskProfile} onClose={() => setShowRiskModal(false)} />
       )}
 
-      {alertTicker && (
-        <AlertModal ticker={alertTicker} onClose={() => setAlertTicker(null)} />
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -1440,7 +1433,6 @@ export default function Portfolio() {
                 {items.map(item => (
                   <PortfolioRow
                     key={item.id} item={item}
-                    onCreateAlert={setAlertTicker}
                     dividendInfo={divMap.get(item.ticker)}
                     spyChangePct={spyChangePct}
                     showAccount={showAccountColumn}

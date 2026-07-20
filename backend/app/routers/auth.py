@@ -113,7 +113,7 @@ def delete_account(
     """Permanently delete the authenticated user's account and ALL associated data.
 
     Cascade rules on the User model ensure that portfolios, watchlists,
-    alerts, snapshots, and portfolio items are removed atomically.
+    snapshots, and portfolio items are removed atomically.
     Feedback rows whose user_id matches are anonymised (user_id set to
     NULL) rather than deleted, so aggregate quality metrics are preserved
     without retaining any personal identifier.
@@ -159,17 +159,6 @@ def data_export(
             models.Watchlist.user_id == current_user.id
         ).all()
     ]
-    alerts = [
-        {
-            "ticker":       a.ticker,
-            "target_price": a.target_price,
-            "condition":    a.condition,
-            "created_at":   a.created_at.isoformat() if a.created_at else None,
-        }
-        for a in db.query(models.PriceAlert).filter(
-            models.PriceAlert.user_id == current_user.id
-        ).all()
-    ]
     return {
         "account": {
             "email":             current_user.email,
@@ -179,5 +168,4 @@ def data_export(
         },
         "portfolio_items": items,
         "watchlist":        watchlist,
-        "price_alerts":     alerts,
     }

@@ -161,22 +161,3 @@ class SavedScreenOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-# --- Price Alerts ---
-
-class PriceAlertCreate(BaseModel):
-    ticker:       str                      = Field(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+$")
-    target_price: float                    = Field(..., gt=0)
-    condition:    Literal["above", "below"]
-
-
-class PriceAlertOut(BaseModel):
-    id:           int
-    ticker:       str
-    target_price: float
-    condition:    str
-    created_at:   datetime
-    triggered_at: datetime | None = None
-
-    model_config = {"from_attributes": True}

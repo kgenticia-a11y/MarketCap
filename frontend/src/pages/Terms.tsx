@@ -95,7 +95,7 @@ export default function Terms() {
               <li>
                 <strong className="text-white">All tools are informational.</strong> The income
                 estimator, portfolio analytics, portfolio health score, screener, watchlist,
-                alerts, paper trading, AI earnings briefs, and any future analytical tool are
+                paper trading, AI earnings briefs, and any future analytical tool are
                 mathematical models or summaries based on inputs you or third parties supply. They
                 are not predictions, recommendations, or guarantees and may be incomplete or wrong.
               </li>
@@ -278,7 +278,7 @@ export default function Terms() {
               We do not guarantee uninterrupted or error-free access. We may modify, suspend,
               throttle, or discontinue any part of the Service at any time, with or without
               notice. We are not liable for any downtime, latency, data loss, or unavailability,
-              including delays or missed price alerts caused by upstream data feeds, scheduling
+              including delays or stale data caused by upstream data feeds, scheduling
               systems, email delivery, network conditions, or third-party outages.
             </p>
           </section>
@@ -536,8 +536,8 @@ export default function Terms() {
               </li>
               <li>
                 <strong className="text-white">User-supplied financial inputs:</strong> tickers,
-                share counts, cost basis, account labels (e.g., "Roth IRA"), watchlist entries,
-                price-alert configurations, screener filters, paper-trading trades and balances,
+                share counts, cost basis, watchlist entries,
+                screener filters, paper-trading trades and balances,
                 and portfolio snapshots derived from these inputs. These are{" "}
                 <strong className="text-white">self-reported</strong> and do not connect to any
                 real brokerage account.
@@ -578,7 +578,7 @@ export default function Terms() {
               <li>provide, maintain, secure, and improve the Service;</li>
               <li>authenticate users and prevent fraud, abuse, and unauthorized access;</li>
               <li>compute analytics and AI Output you request (including transmitting limited inputs to third-party model providers as described in Section 5);</li>
-              <li>send transactional and security messages (price alerts you configure, account or security notices);</li>
+              <li>send transactional and security messages (account or security notices);</li>
               <li>respond to support requests and feedback;</li>
               <li>monitor performance, debug, and comply with our legal obligations;</li>
               <li>enforce these Terms and exercise or defend legal claims.</li>
@@ -691,8 +691,7 @@ export default function Terms() {
                 at any time from the Settings page.
               </li>
               <li>
-                <strong className="text-white">Communications.</strong> You can stop receiving
-                price alerts at any time by removing or disabling them. Account, security, and
+                <strong className="text-white">Communications.</strong> Account, security, and
                 transactional messages are inherent to the Service; if you do not want them, do
                 not use the Service.
               </li>
@@ -763,7 +762,7 @@ export default function Terms() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">30. Email & Marketing Communications (CAN-SPAM)</h2>
             <p>
-              We send transactional messages (price alerts you configure, account and security
+              We send transactional messages (account and security
               notices, and responses to your support requests) inherent to operating the Service.
               If we ever send promotional or marketing email, every such message will (a)
               accurately identify the sender, (b) contain a working unsubscribe mechanism, and
