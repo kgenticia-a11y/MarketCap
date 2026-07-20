@@ -1282,7 +1282,9 @@ export default function Portfolio() {
   const items: PortfolioItem[] = data?.items ?? [];
   // One batched request keeps every row's and the summary's quote fresh —
   // the per-row queries below are pure cache readers.
-  useBatchedQuotes(items.map(i => i.ticker));
+  // 15-minute delayed refresh — portfolio value is a non-critical view and
+  // the cheaper cadence keeps yfinance pressure down.
+  useBatchedQuotes(items.map(i => i.ticker), 15 * 60_000);
 
   if (isLoading) {
     return (
@@ -1346,7 +1348,7 @@ export default function Portfolio() {
           <div className="bg-surface rounded-xl border border-border overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <span className="text-xs font-semibold text-white">Holdings</span>
-              <span className="text-[10px] text-muted">Prices auto-refresh every 60s</span>
+              <span className="text-[10px] text-muted">Prices auto-refresh every 15 min</span>
             </div>
             <table className="w-full text-xs">
               <thead>

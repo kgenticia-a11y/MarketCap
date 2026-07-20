@@ -137,8 +137,8 @@ function WatchRow({ item, onAddToPortfolio }: WatchRowProps) {
   const { data: quote } = useQuery({
     queryKey: ["quote", item.ticker],
     queryFn:  () => getQuote(item.ticker),
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 15 * 60_000,
+    refetchInterval: 15 * 60_000,
   });
 
   const rawPrice  = quote?.price as number | undefined;
