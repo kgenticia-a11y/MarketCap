@@ -164,7 +164,15 @@ synchronise across multiple backend instances:
 
 ### Live prices
 
-The app uses React Query polling (30–60 s) for live price updates. A previous WebSocket placeholder was removed because it never actually broadcast anything. If sub-second live ticks become a requirement, add a dedicated streaming service (Redis pub/sub + a worker pulling from a real-time data vendor) — don't reintroduce a per-process WebSocket manager.
+React Query polling. Stock detail page refreshes every 30 s (backed by a
+shared backend cache so it's effectively free). Portfolio holdings,
+watchlist rows, and the screener's background re-stream refresh every
+15 min — these are non-critical views and the slower cadence keeps
+Yahoo rate-limit pressure and client bandwidth down. A previous WebSocket
+placeholder was removed because it never actually broadcast anything. If
+sub-second live ticks become a requirement, add a dedicated streaming
+service (Redis pub/sub + a worker pulling from a real-time data vendor) —
+don't reintroduce a per-process WebSocket manager.
 
 ## Database
 
