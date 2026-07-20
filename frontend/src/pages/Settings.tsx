@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router-dom";
 import { clsx } from "clsx";
 import {
   User, BarChart2, Bell, Shield, Palette, Download,
-  ChevronRight, Check, Pencil, X, Eye, EyeOff, Trash2, Plus,
+  ChevronRight, Check, Pencil, X, Eye, EyeOff, Trash2,
   Moon, Sun, ExternalLink,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
@@ -403,7 +403,6 @@ export default function Settings() {
         </Row>
       </Section>
 
-      <ConnectedAccountsSection />
       <ExportSection />
 
       {/* About */}
@@ -427,125 +426,6 @@ export default function Settings() {
 
       <DangerZone />
     </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Connected Accounts — multi-account aggregation
-══════════════════════════════════════════════════════════════ */
-import { listAccounts, createAccount, deleteAccount, type UserAccount, type AccountType } from "../api/accounts";
-
-const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
-  { value: "brokerage",  label: "Brokerage" },
-  { value: "retirement", label: "Retirement (IRA/401k)" },
-  { value: "crypto",     label: "Crypto" },
-  { value: "other",      label: "Other" },
-];
-
-function ConnectedAccountsSection() {
-  const qc = useQueryClient();
-  const { data: accounts = [], isLoading } = useQuery<UserAccount[]>({
-    queryKey: ["accounts"],
-    queryFn: listAccounts,
-    staleTime: 5 * 60_000,
-  });
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [type, setType] = useState<AccountType>("brokerage");
-
-  const createMut = useMutation({
-    mutationFn: () => createAccount(name.trim(), type),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success(`${name} added`);
-      setName(""); setType("brokerage"); setAdding(false);
-    },
-    onError: (e: unknown) => {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      toast.error(msg ?? "Failed to add account");
-    },
-  });
-
-  const delMut = useMutation({
-    mutationFn: (id: number) => deleteAccount(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
-      toast.success("Account removed");
-    },
-  });
-
-  return (
-    <Section icon={<BarChart2 size={13} />} title="Connected Accounts">
-      <div className="px-4 py-3">
-        <p className="text-xs text-muted mb-3 leading-relaxed">
-          Tag holdings with the real-world account they belong to (Robinhood, Fidelity, Roth IRA, etc.).
-          Switch between accounts on the Portfolio page or view an aggregated total.
-        </p>
-
-        {isLoading ? (
-          <div className="h-10 bg-surface-hover rounded-lg animate-pulse" />
-        ) : (
-          <div className="space-y-2 mb-3">
-            {accounts.length === 0 && (
-              <p className="text-xs text-muted italic">No accounts yet — add one below.</p>
-            )}
-            {accounts.map(a => (
-              <div key={a.id} className="flex items-center justify-between bg-surface-hover rounded-lg px-3 py-2">
-                <div>
-                  <div className="text-sm font-semibold text-white">{a.name}</div>
-                  <div className="text-[10px] text-muted capitalize">{a.type}</div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (confirm(`Remove account "${a.name}"? Holdings tagged to it will become unassigned.`)) {
-                      delMut.mutate(a.id);
-                    }
-                  }}
-                  disabled={delMut.isPending}
-                  className="text-muted hover:text-negative transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {adding ? (
-          <div className="bg-surface-hover rounded-lg p-3 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={name} onChange={e => setName(e.target.value)}
-                placeholder="Account name (e.g., Robinhood)"
-                className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
-              <select
-                value={type} onChange={e => setType(e.target.value as AccountType)}
-                className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-accent">
-                {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { if (!name.trim()) return toast.error("Enter an account name"); createMut.mutate(); }}
-                disabled={createMut.isPending}
-                className="bg-accent hover:bg-accent/90 disabled:opacity-50 text-white rounded-md px-3 py-1.5 text-xs font-semibold transition-colors">
-                {createMut.isPending ? "Adding…" : "Add"}
-              </button>
-              <button onClick={() => { setAdding(false); setName(""); }}
-                className="text-xs text-muted hover:text-white transition-colors px-2">
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 text-xs text-accent-light hover:text-accent transition-colors">
-            <Plus size={12} /> Add Account
-          </button>
-        )}
-      </div>
-    </Section>
   );
 }
 

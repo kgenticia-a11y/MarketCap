@@ -13,7 +13,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, portfolio, watchlist, history, feedback, admin, screener, paper_trading, accounts, ai, analysis
+from app.routers import auth, stocks, portfolio, watchlist, history, feedback, admin, screener, paper_trading, ai, analysis
 from app.services import market_data
 from app.services.auto_fixer import run_auto_fixer
 from app.services.snapshot_scheduler import snapshot_scheduler_loop
@@ -308,7 +308,6 @@ app.include_router(feedback.router)
 app.include_router(admin.router)
 app.include_router(screener.router)
 app.include_router(paper_trading.router)
-app.include_router(accounts.router)
 app.include_router(ai.router)
 app.include_router(analysis.router)
 

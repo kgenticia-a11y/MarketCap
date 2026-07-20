@@ -56,20 +56,6 @@ def run_lightweight_migrations() -> None:
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
 
-    # Multi-account aggregation: account_id + account_name on portfolio_items.
-    if inspector.has_table("portfolio_items"):
-        cols = {c["name"] for c in inspector.get_columns("portfolio_items")}
-        statements = []
-        if "account_id" not in cols:
-            statements.append("ALTER TABLE portfolio_items ADD COLUMN account_id INTEGER")
-        if "account_name" not in cols:
-            statements.append("ALTER TABLE portfolio_items ADD COLUMN account_name VARCHAR")
-        if statements:
-            with engine.begin() as conn:
-                for stmt in statements:
-                    logger.info("[migration] %s", stmt)
-                    conn.execute(text(stmt))
-
     # JWT invalidation on password change: token_version on users.
     if inspector.has_table("users"):
         cols = {c["name"] for c in inspector.get_columns("users")}
