@@ -6,7 +6,6 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Watchlist from "./Watchlist";
-import Alerts from "./Alerts";
 
 interface StockSnap {
   ticker: string;
@@ -45,7 +44,6 @@ function IndexCard({ snap }: { snap: StockSnap }) {
 const TABS = [
   { key: "overview",   label: "Overview" },
   { key: "watchlist",  label: "Watchlist" },
-  { key: "alerts",     label: "Alerts" },
 ] as const;
 
 type Tab = typeof TABS[number]["key"];
@@ -107,7 +105,6 @@ export default function Home() {
       </div>
 
       {tab === "watchlist" && <Watchlist />}
-      {tab === "alerts" && <Alerts />}
       {tab === "overview" && <>
       {/* Index overview */}
       {ovLoading ? (

@@ -51,27 +51,7 @@ class User(Base):
 
     portfolios   = relationship("Portfolio",    back_populates="owner", cascade="all, delete")
     watchlist    = relationship("Watchlist",    back_populates="owner", cascade="all, delete")
-    alerts       = relationship("PriceAlert",   back_populates="owner", cascade="all, delete")
     saved_screens = relationship("SavedScreen", cascade="all, delete")
-
-
-class UserAccount(Base):
-    """A user-defined brokerage/retirement/crypto account label.
-
-    Used to tag portfolio items so Holdings can be filtered or aggregated
-    across multiple real-world accounts (Robinhood, Fidelity, Roth IRA, etc.).
-    """
-    __tablename__ = "user_accounts"
-
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name       = Column(String, nullable=False)
-    # Free-form but the API restricts to: brokerage | retirement | crypto | other
-    type       = Column(String, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    owner = relationship("User")
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
 
 
 class Portfolio(Base):
@@ -96,18 +76,10 @@ class PortfolioItem(Base):
     ticker = Column(String, nullable=False)
     shares = Column(Float, nullable=False)
     avg_buy_price = Column(Float, nullable=False)
-    # Optional account tag for multi-account aggregation. NULL = unassigned
-    # (legacy rows, or single-account users). `account_name` is denormalised
-    # so old rows survive an account rename/delete with a sensible label.
-    account_id   = Column(Integer, ForeignKey("user_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
-    account_name = Column(String, nullable=True)
     added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     portfolio = relationship("Portfolio", back_populates="items")
-    account   = relationship("UserAccount")
-    # Uniqueness now keyed on account too — same ticker can exist in
-    # Robinhood and Fidelity as two separate positions.
-    __table_args__ = (UniqueConstraint("portfolio_id", "ticker", "account_id"),)
+    __table_args__ = (UniqueConstraint("portfolio_id", "ticker"),)
 
 
 class Watchlist(Base):
@@ -120,24 +92,6 @@ class Watchlist(Base):
 
     owner = relationship("User", back_populates="watchlist")
     __table_args__ = (UniqueConstraint("user_id", "ticker"),)
-
-
-class PriceAlert(Base):
-    __tablename__ = "price_alerts"
-
-    id           = Column(Integer, primary_key=True, index=True)
-    user_id      = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    ticker       = Column(String,  nullable=False)
-    target_price = Column(Float,   nullable=False)
-    condition    = Column(String,  nullable=False)   # "above" | "below"
-    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    # Set by the server-side alert evaluator the first time the condition is
-    # met; null = still armed. The frontend renders this and the evaluator
-    # filters on it, but the column was never added to the model, so every
-    # evaluation pass crashed with an AttributeError.
-    triggered_at = Column(DateTime, nullable=True)
-
-    owner = relationship("User", back_populates="alerts")
 
 
 class PortfolioSnapshot(Base):

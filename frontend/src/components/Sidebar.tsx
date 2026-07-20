@@ -22,6 +22,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { clsx } from "clsx";
+import { PAPER_TRADING_ENABLED } from "../env";
 
 // Primary nav: the six daily-driver flows. Anything used rarely or only
 // from a specific drill-down belongs in `tools` or `more` below so it
@@ -36,11 +37,16 @@ const menu = [
 // Tools: separate, deeper workflows. Grouping them under their own header
 // keeps the primary nav scannable and signals "these are auxiliary".
 const tools = [
-  { label: "Paper Trading",    icon: FlaskConical,     to: "/paper-trading" },
   { label: "Income Estimator", icon: BarChart2,        to: "/income" },
   { label: "Analyst Report",    icon: FileText,          to: "/analyst-report" },
   { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },
 ];
+
+// Labs: feature-flagged experiments, hidden entirely when the flag is off
+// (paper trading is parked pending its memo-gated relaunch).
+const labs = PAPER_TRADING_ENABLED
+  ? [{ label: "Paper Trading", icon: FlaskConical, to: "/paper-trading" }]
+  : [];
 
 const account = [
   { label: "Settings", icon: Settings, to: "/settings" },
@@ -168,6 +174,19 @@ export default function Sidebar({ mobileOpen, onClose, collapsed = false, onTogg
               ))}
             </div>
           </div>
+
+          {labs.length > 0 && (
+            <div>
+              {!isCollapsed && (
+                <p className="text-[10px] font-semibold text-muted uppercase tracking-widest px-3 mb-2">Labs</p>
+              )}
+              <div className="space-y-0.5">
+                {labs.map((item) => (
+                  <NavItem key={item.to} {...item} collapsed={isCollapsed} onClick={onClose} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             {!isCollapsed && (

@@ -1,19 +1,17 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router-dom";
 import { clsx } from "clsx";
 import {
-  User, BarChart2, Bell, Shield, Palette, BellRing, Download,
-  ChevronRight, Check, Pencil, X, Eye, EyeOff, Trash2, Plus,
-  TrendingUp, TrendingDown, AlertTriangle, Moon, Sun, ExternalLink,
+  User, BarChart2, Bell, Shield, Palette, Download,
+  ChevronRight, Check, Pencil, X, Eye, EyeOff, Trash2,
+  Moon, Sun, ExternalLink,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import client from "../api/client";
-import { getAlerts, createAlert, deleteAlert, type Alert } from "../api/alerts";
-import { getQuote } from "../api/stocks";
 
 
 import { loadPrefs, savePrefs, type Prefs } from "../utils/prefs";
@@ -267,181 +265,6 @@ function AppearanceSection() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Price Alerts section
-══════════════════════════════════════════════════════════════ */
-function AlertRow({ alert, onDelete }: { alert: Alert; onDelete: () => void }) {
-  const refetchMs = useMemo(() => loadPrefs().refetchSec * 1000, []);
-  const notifiedRef = useRef(false);
-
-  const { data: quote } = useQuery({
-    queryKey: ["quote", alert.ticker],
-    queryFn:  () => getQuote(alert.ticker),
-    staleTime: refetchMs,
-    refetchInterval: refetchMs,
-  });
-
-  const currentPrice: number = quote?.price ?? 0;
-  const triggered =
-    currentPrice > 0 &&
-    ((alert.condition === "above" && currentPrice >= alert.target_price) ||
-     (alert.condition === "below" && currentPrice <= alert.target_price));
-
-  // Fire a browser notification the first time this alert triggers
-  useEffect(() => {
-    if (!triggered || notifiedRef.current) return;
-    notifiedRef.current = true;
-    if (Notification.permission === "granted") {
-      new Notification(`Price Alert: ${alert.ticker}`, {
-        body: `${alert.ticker} has ${alert.condition === "above" ? "risen above" : "fallen below"} $${alert.target_price.toFixed(2)} — now $${currentPrice.toFixed(2)}`,
-        icon: "/favicon.ico",
-      });
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission().then(p => {
-        if (p === "granted") {
-          new Notification(`Price Alert: ${alert.ticker}`, {
-            body: `${alert.ticker} has ${alert.condition === "above" ? "risen above" : "fallen below"} $${alert.target_price.toFixed(2)} — now $${currentPrice.toFixed(2)}`,
-            icon: "/favicon.ico",
-          });
-        }
-      });
-    }
-  }, [triggered, alert, currentPrice]);
-
-  return (
-    <div className="flex items-center justify-between px-5 py-3 gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        {triggered
-          ? <AlertTriangle size={14} className="text-amber-400 shrink-0 animate-pulse" />
-          : alert.condition === "above"
-            ? <TrendingUp  size={14} className="text-positive shrink-0" />
-            : <TrendingDown size={14} className="text-negative shrink-0" />}
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-white">{alert.ticker}</div>
-          <div className="text-xs text-muted">
-            {alert.condition === "above" ? "Rises above" : "Falls below"}{" "}
-            <span className="text-white">${alert.target_price.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="text-right">
-          {currentPrice > 0 && (
-            <div className="text-xs text-muted">Now: <span className="text-white">${currentPrice.toFixed(2)}</span></div>
-          )}
-          {triggered && (
-            <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
-              TRIGGERED
-            </span>
-          )}
-        </div>
-        <button onClick={onDelete} className="p-1.5 rounded-lg text-muted hover:text-negative hover:bg-negative/10 transition-colors">
-          <Trash2 size={13} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PriceAlertsSection() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const [ticker,    setTicker]    = useState("");
-  const [price,     setPrice]     = useState("");
-  const [condition, setCondition] = useState<"above" | "below">("above");
-
-  const { data: alerts = [] } = useQuery<Alert[]>({
-    queryKey: ["alerts"],
-    queryFn:  getAlerts,
-    enabled:  !!user,
-    staleTime: 30_000,
-  });
-
-  const addMut = useMutation({
-    mutationFn: () => createAlert(ticker, parseFloat(price), condition),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ["alerts"] });
-      setTicker(""); setPrice("");
-      toast.success("Price alert set");
-    },
-    onError: () => toast.error("Failed to set alert"),
-  });
-
-  const delMut = useMutation({
-    mutationFn: (id: number) => deleteAlert(id),
-    onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: ["alerts"] });
-      toast.success("Alert removed");
-    },
-    onError: () => toast.error("Failed to remove alert"),
-  });
-
-  if (!user) {
-    return (
-      <Section icon={<BellRing size={13} />} title="Price Alerts">
-        <Row label="Sign in to set price alerts" sub="">
-          <Link to="/login" className="text-xs text-accent-light hover:text-accent flex items-center gap-1">
-            Sign in <ChevronRight size={12} />
-          </Link>
-        </Row>
-      </Section>
-    );
-  }
-
-  return (
-    <Section icon={<BellRing size={13} />} title="Price Alerts">
-      {/* Add alert form */}
-      <div className="px-5 py-4 space-y-2.5">
-        <div className="flex gap-2">
-          <input
-            placeholder="Ticker (e.g. AAPL)"
-            value={ticker}
-            onChange={e => setTicker(e.target.value.toUpperCase())}
-            className="flex-1 bg-surface-raised border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted outline-none focus:border-accent transition-colors uppercase"
-          />
-          <input
-            type="number" min="0" step="any"
-            placeholder="Target $"
-            value={price}
-            onChange={e => setPrice(e.target.value)}
-            className="w-28 bg-surface-raised border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted outline-none focus:border-accent transition-colors"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 flex-1">
-            {(["above", "below"] as const).map(c => (
-              <button key={c} onClick={() => setCondition(c)}
-                className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1",
-                  condition === c ? "bg-accent text-white" : "bg-surface-hover text-muted hover:text-white")}>
-                {c === "above" ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                {c.charAt(0).toUpperCase() + c.slice(1)}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => addMut.mutate()}
-            disabled={!ticker || !price || addMut.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent/90 disabled:opacity-40 text-white text-xs font-medium transition-all"
-          >
-            <Plus size={12} /> Add Alert
-          </button>
-        </div>
-      </div>
-
-      {/* Alert list */}
-      {alerts.length === 0 ? (
-        <div className="px-5 pb-4 text-xs text-muted">No alerts set. Add one above.</div>
-      ) : (
-        <div className="divide-y divide-border/40">
-          {alerts.map(a => (
-            <AlertRow key={a.id} alert={a} onDelete={() => delMut.mutate(a.id)} />
-          ))}
-        </div>
-      )}
-    </Section>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
    Export section
 ══════════════════════════════════════════════════════════════ */
 function ExportSection() {
@@ -580,8 +403,6 @@ export default function Settings() {
         </Row>
       </Section>
 
-      <PriceAlertsSection />
-      <ConnectedAccountsSection />
       <ExportSection />
 
       {/* About */}
@@ -605,125 +426,6 @@ export default function Settings() {
 
       <DangerZone />
     </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Connected Accounts — multi-account aggregation
-══════════════════════════════════════════════════════════════ */
-import { listAccounts, createAccount, deleteAccount, type UserAccount, type AccountType } from "../api/accounts";
-
-const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
-  { value: "brokerage",  label: "Brokerage" },
-  { value: "retirement", label: "Retirement (IRA/401k)" },
-  { value: "crypto",     label: "Crypto" },
-  { value: "other",      label: "Other" },
-];
-
-function ConnectedAccountsSection() {
-  const qc = useQueryClient();
-  const { data: accounts = [], isLoading } = useQuery<UserAccount[]>({
-    queryKey: ["accounts"],
-    queryFn: listAccounts,
-    staleTime: 5 * 60_000,
-  });
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [type, setType] = useState<AccountType>("brokerage");
-
-  const createMut = useMutation({
-    mutationFn: () => createAccount(name.trim(), type),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success(`${name} added`);
-      setName(""); setType("brokerage"); setAdding(false);
-    },
-    onError: (e: unknown) => {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      toast.error(msg ?? "Failed to add account");
-    },
-  });
-
-  const delMut = useMutation({
-    mutationFn: (id: number) => deleteAccount(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
-      toast.success("Account removed");
-    },
-  });
-
-  return (
-    <Section icon={<BarChart2 size={13} />} title="Connected Accounts">
-      <div className="px-4 py-3">
-        <p className="text-xs text-muted mb-3 leading-relaxed">
-          Tag holdings with the real-world account they belong to (Robinhood, Fidelity, Roth IRA, etc.).
-          Switch between accounts on the Portfolio page or view an aggregated total.
-        </p>
-
-        {isLoading ? (
-          <div className="h-10 bg-surface-hover rounded-lg animate-pulse" />
-        ) : (
-          <div className="space-y-2 mb-3">
-            {accounts.length === 0 && (
-              <p className="text-xs text-muted italic">No accounts yet — add one below.</p>
-            )}
-            {accounts.map(a => (
-              <div key={a.id} className="flex items-center justify-between bg-surface-hover rounded-lg px-3 py-2">
-                <div>
-                  <div className="text-sm font-semibold text-white">{a.name}</div>
-                  <div className="text-[10px] text-muted capitalize">{a.type}</div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (confirm(`Remove account "${a.name}"? Holdings tagged to it will become unassigned.`)) {
-                      delMut.mutate(a.id);
-                    }
-                  }}
-                  disabled={delMut.isPending}
-                  className="text-muted hover:text-negative transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {adding ? (
-          <div className="bg-surface-hover rounded-lg p-3 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={name} onChange={e => setName(e.target.value)}
-                placeholder="Account name (e.g., Robinhood)"
-                className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
-              <select
-                value={type} onChange={e => setType(e.target.value as AccountType)}
-                className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-accent">
-                {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { if (!name.trim()) return toast.error("Enter an account name"); createMut.mutate(); }}
-                disabled={createMut.isPending}
-                className="bg-accent hover:bg-accent/90 disabled:opacity-50 text-white rounded-md px-3 py-1.5 text-xs font-semibold transition-colors">
-                {createMut.isPending ? "Adding…" : "Add"}
-              </button>
-              <button onClick={() => { setAdding(false); setName(""); }}
-                className="text-xs text-muted hover:text-white transition-colors px-2">
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 text-xs text-accent-light hover:text-accent transition-colors">
-            <Plus size={12} /> Add Account
-          </button>
-        )}
-      </div>
-    </Section>
   );
 }
 

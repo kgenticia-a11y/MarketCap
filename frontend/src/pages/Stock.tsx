@@ -4,10 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQuote, getDetails } from "../api/stocks";
 import { addToPortfolio } from "../api/portfolio";
 import { addToWatchlist, removeFromWatchlist, getWatchlist } from "../api/watchlist";
-import { createAlert } from "../api/alerts";
 import StockChart from "../components/StockChart";
 import ErrorBoundary from "../components/ErrorBoundary";
-import { Star, Plus, Building2, TrendingUp, TrendingDown, Bell, X } from "lucide-react";
+import { Star, Plus, Building2, TrendingUp, TrendingDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { clsx } from "clsx";
 import { toast } from "sonner";
@@ -61,9 +60,6 @@ export default function Stock() {
   const [showPortModal,  setShowPortModal]  = useState(false);
   const [shares,         setShares]         = useState("1");
   const [buyPrice,       setBuyPrice]       = useState("");
-  const [showAlertForm,  setShowAlertForm]  = useState(false);
-  const [alertPrice,     setAlertPrice]     = useState("");
-  const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
 
   const portMutation = useMutation({
     mutationFn: () => {
@@ -79,21 +75,6 @@ export default function Stock() {
       toast.success(`${upper} added to portfolio`);
     },
     onError: (e: unknown) => { if ((e as Error)?.message !== "invalid") toast.error("Failed to add to portfolio"); },
-  });
-
-  const alertMutation = useMutation({
-    mutationFn: () => {
-      const p = parseFloat(alertPrice);
-      if (!isFinite(p) || p <= 0) { toast.error("Enter a valid price."); throw new Error("invalid"); }
-      return createAlert(upper, p, alertCondition);
-    },
-    onSuccess: () => {
-      setShowAlertForm(false);
-      setAlertPrice("");
-      qc.invalidateQueries({ queryKey: ["alerts"] });
-      toast.success(`Alert set for ${upper}`);
-    },
-    onError: (e: unknown) => { if ((e as Error)?.message !== "invalid") toast.error("Failed to set alert"); },
   });
 
   const price: number | null = qLoading ? null : (quote?.price ?? null);
@@ -156,13 +137,6 @@ export default function Stock() {
               {isWatched ? "Watching" : "Watch"}
             </button>
             <button
-              onClick={() => { setAlertPrice(price != null ? price.toFixed(2) : ""); setShowAlertForm(true); }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border border-border text-muted hover:text-white hover:border-border-strong transition-all"
-            >
-              <Bell size={15} />
-              Set Alert
-            </button>
-            <button
               onClick={() => { setBuyPrice(price != null ? price.toFixed(2) : ""); setShowPortModal(true); }}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-accent hover:bg-accent/90 text-white transition-all shadow-lg shadow-accent/20"
             >
@@ -205,45 +179,6 @@ export default function Stock() {
           )}
         </div>
       </div>
-
-      {/* Alert modal */}
-      {showAlertForm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowAlertForm(false)}>
-          <div className="bg-surface-raised border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">Set Price Alert — {upper}</h3>
-              <button onClick={() => setShowAlertForm(false)} className="text-muted hover:text-white transition-colors"><X size={16} /></button>
-            </div>
-            <div className="space-y-3 mb-5">
-              <div>
-                <label className="text-xs text-muted mb-1.5 block">Condition</label>
-                <div className="flex gap-2">
-                  {(["above", "below"] as const).map(c => (
-                    <button key={c} onClick={() => setAlertCondition(c)}
-                      className={clsx("flex-1 py-2 rounded-xl text-xs font-medium border transition-colors",
-                        alertCondition === c ? "bg-accent border-accent text-white" : "border-border text-muted hover:text-white")}>
-                      {c === "above" ? "Rises above" : "Falls below"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1.5 block">Target Price ($)</label>
-                <input type="number" min="0" step="any" value={alertPrice}
-                  onChange={e => setAlertPrice(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-accent transition-colors" />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowAlertForm(false)} className="flex-1 py-2.5 rounded-xl text-sm text-muted border border-border hover:border-border-strong transition-colors">Cancel</button>
-              <button onClick={() => alertMutation.mutate()} disabled={!alertPrice || alertMutation.isPending}
-                className="flex-1 py-2.5 rounded-xl text-sm bg-accent hover:bg-accent/90 disabled:opacity-50 text-white font-medium transition-all">
-                {alertMutation.isPending ? "Setting…" : "Set Alert"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Portfolio modal */}
       {showPortModal && (

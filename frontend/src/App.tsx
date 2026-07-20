@@ -18,6 +18,7 @@ import Screener from "./pages/Screener";
 import PaperTrading from "./pages/PaperTrading";
 import Terms from "./pages/Terms";
 import AnalystReport from "./pages/AnalystReport";
+import { PAPER_TRADING_ENABLED } from "./env";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
 function Private({ title, fullHeight, children }: {
@@ -49,8 +50,9 @@ function AppRoutes() {
       <Route path="/history"  element={<Private title="History"><History /></Private>} />
       <Route path="/feedback" element={<Private title="Feedback"><FeedbackPage /></Private>} />
       <Route path="/screener" element={<Private title="Stock Screener"><Screener /></Private>} />
-      <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
-      <Route path="/alerts"   element={<Navigate to="/?tab=alerts" replace />} />
+      {PAPER_TRADING_ENABLED && (
+        <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
+      )}
       <Route path="/analyst-report" element={<Private title="Analyst Report"><AnalystReport /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}

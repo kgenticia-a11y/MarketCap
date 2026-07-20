@@ -1,0 +1,4 @@
+id,portfolio_id,ticker,shares,avg_buy_price,added_at,account_id,account_name
+14,3,NVDA,3,214.75,2026-06-04 13:28:47.689749+00,,
+15,3,SPCX,5,150,2026-06-19 12:09:33.959813+00,,
+19,23,MSFT,5,300,2026-06-22 15:31:18.346799+00,1,Robinhood

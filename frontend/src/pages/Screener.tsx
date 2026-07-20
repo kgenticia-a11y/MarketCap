@@ -340,9 +340,9 @@ interface ScreenerCache {
 const screenerCache: ScreenerCache = { rows: [], ts: 0, refreshingTs: 0 };
 
 // How often the background refresher re-streams the universe to keep prices
-// fresh. 5 minutes matches the backend's _SCREENER_TTL / refresh loop so we
-// land in the warm-cache fast path rather than triggering a cold fetch.
-const SCREENER_REFRESH_MS = 5 * 60 * 1000;
+// fresh. 15 minutes: the screener is a non-critical view, and the backend's
+// 30-minute cache means we still land in the warm-cache fast path.
+const SCREENER_REFRESH_MS = 15 * 60 * 1000;
 
 export default function Screener() {
   const qc = useQueryClient();

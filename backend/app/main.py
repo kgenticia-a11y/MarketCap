@@ -13,9 +13,8 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, portfolio, watchlist, history, feedback, alerts, admin, screener, paper_trading, accounts, ai, analysis
+from app.routers import auth, stocks, portfolio, watchlist, history, feedback, admin, screener, paper_trading, ai, analysis
 from app.services import market_data
-from app.services.alert_evaluator import alert_evaluation_loop
 from app.services.auto_fixer import run_auto_fixer
 from app.services.snapshot_scheduler import snapshot_scheduler_loop
 
@@ -154,13 +153,6 @@ async def lifespan(app: FastAPI):
     )
     screener_refresh_task.add_done_callback(_on_task_done)
 
-    # Server-side price-alert evaluation. Without this, alerts persist in the
-    # DB but `triggered_at` is never set — the badge / daily brief never light
-    # up. Runs on its own short-lived DB sessions so a slow evaluation cycle
-    # can't block user requests.
-    alerts_task = asyncio.create_task(alert_evaluation_loop(), name="alert-evaluation-loop")
-    alerts_task.add_done_callback(_on_task_done)
-
     # Hourly portfolio snapshot scheduler — fills history rows for users who
     # haven't opened the app today. Without this, the history chart has gaps
     # for inactive users (the analytics endpoint only writes a row on demand).
@@ -186,7 +178,6 @@ async def lifespan(app: FastAPI):
         overview_refresh_task,
         update_refresh_task,
         screener_refresh_task,
-        alerts_task,
         snapshot_task,
         warm_task,
         overview_task,
@@ -314,11 +305,9 @@ app.include_router(portfolio.router)
 app.include_router(watchlist.router)
 app.include_router(history.router)
 app.include_router(feedback.router)
-app.include_router(alerts.router)
 app.include_router(admin.router)
 app.include_router(screener.router)
 app.include_router(paper_trading.router)
-app.include_router(accounts.router)
 app.include_router(ai.router)
 app.include_router(analysis.router)
 

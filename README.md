@@ -1,6 +1,6 @@
 # MarketCap
 
-A real-time stock tracking web app — portfolios, watchlists, price alerts, live charts, and a stock screener. Backend in FastAPI, frontend in React + Vite.
+A real-time stock tracking web app — portfolios, watchlists, live charts, and a stock screener. Backend in FastAPI, frontend in React + Vite.
 
 Uses Yahoo Finance via `yfinance` for free market data — no paid API keys required.
 
@@ -31,19 +31,24 @@ Open <http://localhost:5173>.
 | Backend     | FastAPI, SQLAlchemy 2, Pydantic v2, SQLite (Postgres-ready)  |
 | Auth        | JWT (python-jose) + bcrypt                                   |
 | Market data | `yfinance` — no API key needed                               |
-| Live prices | React Query polling on a 30–60 s interval                    |
+| Live prices | React Query polling: 30 s on stock detail; 15 min for non-critical views (portfolio, watchlist, screener) |
 | Toasts      | Sonner                                                       |
 
 ## Features
 
 - Portfolio with live P&L and historical value chart
 - Watchlist with mini-sparklines
-- Price alerts with browser notifications
 - Stock screener with sector / market-cap / P/E filters
 - Income estimator (dividend projection)
 - Interactive candlestick chart
+- Institutional-format analyst report (AI-narrative or docs-driven)
+- AI co-pilot: daily brief, chart analysis, pre-earnings briefs, chat assistant
 - Dark + light mode, customisable accent colour
 - ⌘K search with arrow-key navigation and recent searches
+
+Paper trading is present in the codebase but parked behind
+`VITE_ENABLE_PAPER_TRADING` pending a memo-gated relaunch (off by default
+in production).
 
 ## Configuration
 

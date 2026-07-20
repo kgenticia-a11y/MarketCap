@@ -235,8 +235,8 @@ def _fetch_quote(ticker: str) -> dict:
             raise ValueError(f"Ticker '{ticker}' not found")
         # If we only have a previous close, the print is from a prior session.
         # Reporting change_pct=0 here silently masquerades stale data as
-        # "unchanged today", which trips alert evaluators and the watchlist
-        # UI. Surface the staleness so callers can render or filter it.
+        # "unchanged today", which misleads the watchlist UI. Surface the
+        # staleness so callers can render or filter it.
         change_pct = 0.0
         stale = True
 
