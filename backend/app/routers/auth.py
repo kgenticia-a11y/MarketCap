@@ -159,6 +159,21 @@ def data_export(
             models.Watchlist.user_id == current_user.id
         ).all()
     ]
+    memos = [
+        {
+            "ticker":         m.ticker,
+            "status":         m.status,
+            "created_at":     m.created_at.isoformat() if m.created_at else None,
+            "published_at":   m.published_at.isoformat() if m.published_at else None,
+            "thesis_summary": m.thesis_summary,
+            "recommendation": m.recommendation,
+            "price_at_memo":  m.price_at_memo,
+            "price_target":   m.price_target,
+        }
+        for m in db.query(models.InvestmentMemo).filter(
+            models.InvestmentMemo.user_id == current_user.id
+        ).all()
+    ]
     return {
         "account": {
             "email":             current_user.email,
@@ -166,6 +181,7 @@ def data_export(
             "created_at":        current_user.created_at.isoformat() if current_user.created_at else None,
             "terms_accepted_at": current_user.terms_accepted_at.isoformat() if current_user.terms_accepted_at else None,
         },
-        "portfolio_items": items,
+        "portfolio_items":  items,
         "watchlist":        watchlist,
+        "investment_memos": memos,
     }
