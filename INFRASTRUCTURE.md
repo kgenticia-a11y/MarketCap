@@ -14,7 +14,7 @@ takes down some or all of the site:
 
 ```
 User
- │  DNS: marketcap.kystems.live  ── managed by LOVABLE (registrar: Name.com)
+ │  DNS: marketcap.ksystems.live  ── managed by LOVABLE (registrar: Name.com)
  ▼
 Vercel  ── serves the React frontend (per-deploy URLs + custom domain)
  │  HTTPS calls to VITE_API_URL
@@ -33,10 +33,10 @@ Run these top-down; the first one that fails is your layer:
 
 ```bash
 # 1. DNS resolves?  (Lovable → Vercel)
-dig +short marketcap.kystems.live          # blank/NXDOMAIN = DNS not configured
+dig +short marketcap.ksystems.live          # blank/NXDOMAIN = DNS not configured
 
 # 2. Frontend up?   (Vercel)
-curl -I https://marketcap.kystems.live     # expect 200/3xx
+curl -I https://marketcap.ksystems.live     # expect 200/3xx
 
 # 3. Backend alive?  (Fly process)
 curl -s https://marketcap-backend.fly.dev/health/live   # {"status":"alive"} = process OK
@@ -57,15 +57,15 @@ curl -s https://marketcap-backend.fly.dev/health        # "database":"ok" = DB r
 
 ### §A — DNS not resolving (Lovable / Name.com)
 
-`marketcap.kystems.live` is registered through **Lovable**; DNS is edited in the
+`marketcap.ksystems.live` is registered through **Lovable**; DNS is edited in the
 Lovable dashboard, not Name.com directly. Needed record:
 
 | Type | Host | Value |
 |---|---|---|
 | CNAME | `marketcap` | `cname.vercel-dns.com` |
 
-After adding, propagation is 1–30 min. Verify: `dig @8.8.8.8 +short marketcap.kystems.live`.
-Cross-check Vercel's expectation: `npx vercel domains inspect kystems.live`.
+After adding, propagation is 1–30 min. Verify: `dig @8.8.8.8 +short marketcap.ksystems.live`.
+Cross-check Vercel's expectation: `npx vercel domains inspect ksystems.live`.
 
 ### §B — Frontend down (Vercel)
 
