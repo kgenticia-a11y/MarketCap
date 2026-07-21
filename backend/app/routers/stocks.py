@@ -86,6 +86,18 @@ async def quote(ticker: str):
         raise HTTPException(502, "Market data unavailable.")
 
 
+@router.get("/fundamentals/{ticker}")
+async def fundamentals(ticker: str):
+    """Compact fundamental snapshot (margins, growth, leverage, valuation
+    multiples, DCF base inputs) for the memo builder and comps table."""
+    t = _validate_ticker(ticker)
+    try:
+        return await market_data.get_fundamentals(t)
+    except Exception:
+        logger.exception("fundamentals failed for %s", t)
+        raise HTTPException(502, "Market data unavailable.")
+
+
 @router.get("/details/{ticker}")
 async def details(ticker: str):
     t = _validate_ticker(ticker)

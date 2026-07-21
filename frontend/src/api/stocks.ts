@@ -12,6 +12,33 @@ export const getQuotes = (tickers: string[]) =>
 export const getDetails = (ticker: string) =>
   client.get(`/stocks/details/${ticker}`).then((r) => r.data);
 
+export interface Fundamentals {
+  ticker: string;
+  name: string;
+  market_cap: number | null;
+  price: number | null;
+  pe: number | null;
+  forward_pe: number | null;
+  ps: number | null;
+  ev_to_ebitda: number | null;
+  revenue_growth_pct: number | null;
+  earnings_growth_pct: number | null;
+  gross_margin_pct: number | null;
+  operating_margin_pct: number | null;
+  profit_margin_pct: number | null;
+  debt_to_equity: number | null;
+  current_ratio: number | null;
+  roe_pct: number | null;
+  free_cash_flow: number | null;
+  total_revenue: number | null;
+  shares_outstanding: number | null;
+  total_debt: number | null;
+  total_cash: number | null;
+}
+
+export const getFundamentals = (ticker: string) =>
+  client.get(`/stocks/fundamentals/${ticker}`).then((r) => r.data as Fundamentals);
+
 export const getChart = (ticker: string, range: string) =>
   client.get(`/stocks/chart/${ticker}`, { params: { range } }).then((r) => r.data);
 

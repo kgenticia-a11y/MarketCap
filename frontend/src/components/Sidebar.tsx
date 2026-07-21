@@ -18,6 +18,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  NotebookPen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -37,6 +38,7 @@ const menu = [
 // Tools: separate, deeper workflows. Grouping them under their own header
 // keeps the primary nav scannable and signals "these are auxiliary".
 const tools = [
+  { label: "Investment Memos", icon: NotebookPen,      to: "/memos" },
   { label: "Income Estimator", icon: BarChart2,        to: "/income" },
   { label: "Analyst Report",    icon: FileText,          to: "/analyst-report" },
   { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },
