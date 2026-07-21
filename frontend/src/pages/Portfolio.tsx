@@ -247,7 +247,7 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
         <p className="text-xs font-semibold text-white">New Position</p>
         <button onClick={() => setOpen(false)} className="text-muted hover:text-white"><X size={15} /></button>
       </div>
-      <div className="grid gap-3 grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
         <div>
           <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Ticker</label>
           <input value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} placeholder="AAPL"
@@ -666,7 +666,7 @@ function PnlHistoryChart({ snapshots, benchmark }: { snapshots: Snapshot[]; benc
       {/* Benchmark summary card */}
       {mode === "pct" && hasBenchmark && spyReturn != null && vsBenchmark != null && (
         <div className="bg-surface-hover rounded-xl p-4 mt-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-[10px] text-muted uppercase tracking-widest font-semibold mb-1">Your Return</p>
               <p className={clsx("text-sm font-bold", portfolioReturn >= 0 ? "text-positive" : "text-negative")}>
@@ -764,7 +764,7 @@ function DividendCard({ holdings }: { holdings: Holding[] }) {
         <p className="text-[10px] font-semibold text-muted uppercase tracking-widest">Projected Dividend Income</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <p className="text-[10px] text-muted uppercase tracking-widest mb-1">Annual Income</p>
           <p className="text-2xl font-bold text-white">${fmtMoney(totalAnnual)}<span className="text-sm text-muted font-normal">/yr</span></p>
@@ -797,7 +797,7 @@ function PerformersPanel({ holdings }: { holdings: Holding[] }) {
   const best = sorted.slice(0, 3);
   const worst = [...sorted].reverse().slice(0, 3);
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <HoldingList items={best} label="Top Performers" />
       <HoldingList items={worst} label="Worst Performers" />
     </div>
@@ -894,7 +894,7 @@ function AIAnalysisPanel({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {analysis.strengths && analysis.strengths.length > 0 && (
               <div className="bg-positive/5 border border-positive/20 rounded-xl p-4">
                 <p className="text-[10px] font-semibold text-positive uppercase tracking-widest mb-2">Key Strengths</p>
@@ -986,7 +986,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[0, 1, 2, 3].map(i => <div key={i} className="h-28 bg-surface rounded-xl border border-border animate-pulse" />)}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[0, 1, 2].map(i => <div key={i} className="h-48 bg-surface rounded-xl border border-border animate-pulse" />)}
       </div>
       <p className="text-center text-xs text-muted">Loading analytics…</p>
@@ -1014,7 +1014,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
     <div className="space-y-4 mb-6">
       <RiskMetrics holdings={holdings} totalValue={totalVal} />
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <AllocationPie data={holdingPie} title="Allocation — By Holding" />
         <AllocationPie data={sectorPie} title="Allocation — By Sector" />
         <HealthScoreCard />
@@ -1022,7 +1022,7 @@ function AnalyticsPanel({ riskProfile }: { riskProfile: RiskProfile | null }) {
 
       <DividendCard holdings={holdings} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <GeoExposure holdings={holdings} />
         <TopHoldingsBar holdings={holdings} />
       </div>
@@ -1105,9 +1105,9 @@ function PortfolioRow({ item, dividendInfo, spyChangePct }: { item: PortfolioIte
             className="w-24 bg-surface border border-border rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-accent" />
         </td>
         <td className="py-2 px-4" />
-        <td className="py-2 px-4" />
-        <td className="py-2 px-4" />
-        <td className="py-2 px-4" />
+        <td className="py-2 px-4 hidden sm:table-cell" />
+        <td className="py-2 px-4 hidden sm:table-cell" />
+        <td className="py-2 px-4 hidden sm:table-cell" />
         <td className="py-2 px-5 text-right">
           <div className="flex items-center justify-end gap-2">
             <button onClick={() => {
@@ -1141,13 +1141,13 @@ function PortfolioRow({ item, dividendInfo, spyChangePct }: { item: PortfolioIte
       <td className="py-3 px-4 text-right text-sm text-white">
         {priceLoaded ? `$${fmtMoney(value)}` : <span className="text-muted">—</span>}
       </td>
-      <td className="py-3 px-4 text-right text-sm text-muted">
+      <td className="py-3 px-4 text-right text-sm text-muted hidden sm:table-cell">
         {dividendInfo && dividendInfo.dividend_yield > 0 ? `${dividendInfo.dividend_yield.toFixed(2)}%` : <span className="text-muted">—</span>}
       </td>
-      <td className="py-3 px-4 text-right text-sm text-muted">
+      <td className="py-3 px-4 text-right text-sm text-muted hidden sm:table-cell">
         {dividendInfo && dividendInfo.annual_dividend_income > 0 ? `$${fmtMoney(dividendInfo.annual_dividend_income)}` : <span className="text-muted">—</span>}
       </td>
-            <td className="py-3 px-4 text-right text-sm">
+      <td className="py-3 px-4 text-right text-sm hidden sm:table-cell">
         {priceLoaded && spyChangePct != null ? (
           <span className={clsx("font-medium", pnlPct - spyChangePct >= 0 ? "text-positive" : "text-negative")}>
             {pnlPct - spyChangePct >= 0 ? "+" : ""}{(pnlPct - spyChangePct).toFixed(2)}%
@@ -1186,7 +1186,7 @@ function PortfolioSummary({ items }: { items: PortfolioItem[] }) {
   const totalPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const positive = totalPnl >= 0;
   return (
-    <div className="grid grid-cols-3 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 sm:mb-6">
       <div className="bg-surface rounded-xl border border-border p-5 flex items-center gap-4">
         <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
           <DollarSign size={18} className="text-accent-light" />
@@ -1288,7 +1288,7 @@ export default function Portfolio() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-2">
+      <div className="p-4 sm:p-6 space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-12 bg-surface rounded-xl animate-pulse" />
         ))}
@@ -1299,13 +1299,13 @@ export default function Portfolio() {
   const { label: riskLabel, cls: riskCls } = riskBadge(riskProfile);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {showRiskModal && (
         <RiskProfileModal onSave={saveRiskProfile} onClose={() => setShowRiskModal(false)} />
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-white">Portfolio</h1>
           <button
@@ -1345,7 +1345,7 @@ export default function Portfolio() {
           <PortfolioSummary items={items} />
           <AnalyticsPanel riskProfile={riskProfile} />
 
-          <div className="bg-surface rounded-xl border border-border overflow-hidden">
+          <div className="bg-surface rounded-xl border border-border overflow-x-auto">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <span className="text-xs font-semibold text-white">Holdings</span>
               <span className="text-[10px] text-muted">Prices auto-refresh every 15 min</span>
@@ -1358,7 +1358,8 @@ export default function Portfolio() {
                   ].map(h => (
                     <th key={h} className={clsx("py-3 text-muted font-medium",
                       h === "" ? "px-5" : "px-4",
-                      h === "Ticker" ? "text-left px-5" : "text-right")}>
+                      h === "Ticker" ? "text-left px-5" : "text-right",
+                      (h === "Div Yield" || h === "Annual Div" || h === "vs SPY") && "hidden sm:table-cell")}>
                       {h}
                     </th>
                   ))}
