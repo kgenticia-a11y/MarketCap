@@ -5,8 +5,10 @@ import {
   getMemo, updateMemo, upsertMoat, publishMemo,
   type MemoPatch, type MemoRecommendation, type MoatUpsert,
 } from "../api/memos";
-import { getFundamentals } from "../api/stocks";
+import { getFundamentals, getQuote } from "../api/stocks";
 import { StatusBadge } from "../components/MemoBadges";
+import CompsTable from "../components/CompsTable";
+import DcfCalculator from "../components/DcfCalculator";
 import {
   MOAT_DIMENSIONS, THESIS_SOFT_LIMIT, canPublish, fmtBig, fmtPct as fmtPctBase,
   sectionFill, type MemoFormState,
@@ -56,13 +58,11 @@ function Section({ index, title, subtitle, filled, open, onToggle, children }: {
 }
 
 /* ── Read-only financial snapshot (section 4 sidebar) ────────────────── */
-function FinancialSnapshot({ ticker }: { ticker: string }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["fundamentals", ticker],
-    queryFn: () => getFundamentals(ticker),
-    staleTime: 30 * 60_000,
-  });
-
+function FinancialSnapshot({ ticker, data, isLoading }: {
+  ticker: string;
+  data: import("../api/stocks").Fundamentals | undefined;
+  isLoading: boolean;
+}) {
   const ratio = (v: number | null | undefined, suffix = "") =>
     v != null ? `${v.toFixed(2)}${suffix}` : "—";
   const pct = (v: number | null | undefined) => (v != null ? fmtPctBase(v, false) : "—");
@@ -153,6 +153,20 @@ export default function MemoEdit() {
     queryKey: ["memo", memoId],
     queryFn: () => getMemo(memoId),
     enabled: Number.isFinite(memoId),
+  });
+
+  const { data: fundamentals, isLoading: fundLoading } = useQuery({
+    queryKey: ["fundamentals", memo?.ticker ?? ""],
+    queryFn: () => getFundamentals(memo!.ticker),
+    enabled: !!memo,
+    staleTime: 30 * 60_000,
+  });
+
+  const { data: quote } = useQuery({
+    queryKey: ["quote", memo?.ticker ?? ""],
+    queryFn: () => getQuote(memo!.ticker),
+    enabled: !!memo,
+    staleTime: 15 * 60_000,
   });
 
   const [form, setForm] = useState<MemoFormState | null>(null);
@@ -417,7 +431,7 @@ export default function MemoEdit() {
               onChange={(e) => setField("financial_health_notes", e.target.value)}
               onBlur={() => void flush()}
             />
-            <FinancialSnapshot ticker={memo.ticker} />
+            <FinancialSnapshot ticker={memo.ticker} data={fundamentals} isLoading={fundLoading} />
           </div>
         </Section>
 
@@ -430,6 +444,13 @@ export default function MemoEdit() {
             value={form.valuation_notes ?? ""}
             onChange={(e) => setField("valuation_notes", e.target.value)}
             onBlur={() => void flush()}
+          />
+          <CompsTable memoId={memoId} ticker={memo.ticker} initialComps={memo.comps} />
+          <DcfCalculator
+            memoId={memoId}
+            currentPrice={(quote?.price as number | undefined) ?? null}
+            fundamentals={fundamentals}
+            initialScenarios={memo.scenarios}
           />
         </Section>
 

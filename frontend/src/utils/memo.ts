@@ -40,13 +40,21 @@ const hasText = (v: string | null | undefined) => !!v?.trim();
  * Section 1 (ticker & basics) is always filled — a memo can't exist without
  * a ticker. Order matches the on-screen section order.
  */
-export function sectionFill(memo: Pick<MemoDetail, "ticker">, form: MemoFormState, moat: MoatUpsert | null): boolean[] {
+export function sectionFill(
+  memo: Pick<MemoDetail, "ticker" | "comps" | "scenarios">,
+  form: MemoFormState,
+  moat: MoatUpsert | null,
+): boolean[] {
+  const valuationFilled =
+    hasText(form.valuation_notes) ||
+    (memo.comps?.peer_tickers.length ?? 0) > 0 ||
+    (memo.scenarios?.length ?? 0) > 0;
   return [
     !!memo.ticker,
     hasText(form.business_overview),
     moatFilled(moat),
     hasText(form.financial_health_notes),
-    hasText(form.valuation_notes),
+    valuationFilled,
     hasText(form.risks),
     hasText(form.thesis_summary) && !!form.recommendation && !!form.price_target,
   ];

@@ -176,7 +176,50 @@ export default function MemoView() {
         )}
 
         <ProseSection title="Financial health" text={memo.financial_health_notes} />
-        <ProseSection title="Valuation" text={memo.valuation_notes} />
+
+        {(memo.valuation_notes?.trim() || (memo.comps?.peer_tickers.length ?? 0) > 0 || memo.scenarios.length > 0) && (
+          <section>
+            <h2 className="text-xs font-semibold text-muted uppercase tracking-widest mb-2">Valuation</h2>
+            {memo.valuation_notes?.trim() && (
+              <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap mb-4">{memo.valuation_notes}</p>
+            )}
+
+            {memo.comps && memo.comps.peer_tickers.length > 0 && (
+              <div className="bg-surface rounded-xl border border-border p-4 mb-4">
+                <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2">Peer set</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {memo.comps.peer_tickers.map((p) => (
+                    <span key={p} className="px-2.5 py-1 rounded-full bg-surface-hover text-xs text-white">{p}</span>
+                  ))}
+                </div>
+                {memo.comps.notes?.trim() && (
+                  <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap mt-3">{memo.comps.notes}</p>
+                )}
+              </div>
+            )}
+
+            {memo.scenarios.length > 0 && (
+              <div className="bg-surface rounded-xl border border-border p-4">
+                <p className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-3">DCF scenarios</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {memo.scenarios.map((s) => (
+                    <div key={s.id} className="bg-surface-raised rounded-lg p-3">
+                      <p className="text-xs text-muted capitalize mb-1">{s.scenario_name}</p>
+                      <p className="text-lg font-bold text-white">{fmtPrice(s.fair_value_per_share)}</p>
+                      <p className="text-[11px] text-muted mt-1.5">
+                        {s.revenue_growth_pct}% growth · {s.operating_margin_pct}% margin
+                      </p>
+                      <p className="text-[11px] text-muted">
+                        {s.discount_rate_pct}% WACC · {s.terminal_growth_pct}% TGR · {s.projection_years}y
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         <ProseSection title="Risks" text={memo.risks} />
       </div>
     </div>
