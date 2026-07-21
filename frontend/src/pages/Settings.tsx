@@ -207,7 +207,7 @@ function ProfileSection() {
             {pwMsg && (
               <p className={clsx("text-xs", pwMsg.ok ? "text-positive" : "text-negative")}>{pwMsg.text}</p>
             )}
-            <button onClick={() => pwMut.mutate()} disabled={!currentPw || newPw.length < 8 || pwMut.isPending}
+            <button onClick={() => pwMut.mutate()} disabled={!currentPw || newPw.length < 8 || !/[A-Z]/.test(newPw) || !/\d/.test(newPw) || !/[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]/.test(newPw) || pwMut.isPending}
               className="w-full py-2 rounded-lg bg-accent hover:bg-accent/90 disabled:opacity-40 text-white text-sm font-medium transition-all">
               {pwMut.isPending ? "Updating…" : "Update Password"}
             </button>
@@ -436,18 +436,20 @@ function DangerZone() {
   const { user, logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [input,      setInput]      = useState("");
+  const [password,   setPassword]   = useState("");
   const [deleting,   setDeleting]   = useState(false);
 
   if (!user) return null;
 
   const handleDelete = async () => {
-    if (input !== "DELETE") return;
+    if (input !== "DELETE" || !password) return;
     setDeleting(true);
     try {
-      await client.delete("/auth/account");
+      await client.delete("/auth/account", { data: { password } });
       logout();
-    } catch {
-      toast.error("Failed to delete account. Try again.");
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to delete account. Try again.";
+      toast.error(msg);
       setDeleting(false);
     }
   };
@@ -473,8 +475,15 @@ function DangerZone() {
         ) : (
           <div className="space-y-2.5">
             <p className="text-xs text-muted">
-              Type <span className="font-mono font-bold text-white">DELETE</span> to confirm.
+              Enter your password and type <span className="font-mono font-bold text-white">DELETE</span> to confirm.
             </p>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Current password"
+              className="w-full bg-surface-raised border border-negative/40 rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted outline-none focus:border-negative transition-colors"
+            />
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -483,11 +492,11 @@ function DangerZone() {
             />
             <div className="flex gap-2">
               <button onClick={handleDelete}
-                disabled={input !== "DELETE" || deleting}
+                disabled={input !== "DELETE" || !password || deleting}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-negative hover:bg-negative/90 disabled:opacity-40 text-white transition-colors">
                 {deleting ? "Deleting…" : "Confirm delete"}
               </button>
-              <button onClick={() => { setConfirming(false); setInput(""); }}
+              <button onClick={() => { setConfirming(false); setInput(""); setPassword(""); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-white bg-surface-hover transition-colors">
                 Cancel
               </button>

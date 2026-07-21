@@ -107,10 +107,13 @@ def change_password(
 
 @router.delete("/account", status_code=204)
 def delete_account(
+    body: schemas.AccountDeleteConfirm,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Permanently delete the authenticated user's account and ALL associated data.
+
+    Requires the current password to prevent account takeover via stolen JWT.
 
     Cascade rules on the User model ensure that portfolios, watchlists,
     snapshots, and portfolio items are removed atomically.
@@ -120,8 +123,9 @@ def delete_account(
 
     GDPR Article 17 / CCPA § 1798.105 — right to erasure.
     """
-    # Anonymise feedback — preserve the message for product analytics,
-    # but sever the link to the now-deleted user.
+    if not auth.verify_password(body.password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect password.")
+
     db.query(models.Feedback).filter(
         models.Feedback.user_id == current_user.id
     ).update({"user_id": None})

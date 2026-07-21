@@ -9,6 +9,14 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 _SPECIAL = re.compile(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>/?\\|`~]')
 
 
+def _json_depth(obj: object, current: int = 1) -> int:
+    if isinstance(obj, dict):
+        return max((_json_depth(v, current + 1) for v in obj.values()), default=current)
+    if isinstance(obj, list):
+        return max((_json_depth(v, current + 1) for v in obj), default=current)
+    return current
+
+
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
@@ -51,6 +59,21 @@ class ProfileUpdate(BaseModel):
 class PasswordUpdate(BaseModel):
     current_password: str = Field(..., max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number.")
+        if not _SPECIAL.search(v):
+            raise ValueError("Password must contain at least one special character.")
+        return v
+
+
+class AccountDeleteConfirm(BaseModel):
+    password: str = Field(..., max_length=128)
 
 
 class Token(BaseModel):
@@ -292,6 +315,16 @@ class WatchlistItemOut(BaseModel):
 class SavedScreenCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
     filters: dict = Field(..., description="Arbitrary screener filter state, stored as JSON")
+
+    @field_validator("filters")
+    @classmethod
+    def _validate_filters(cls, v: dict) -> dict:
+        import json
+        if len(json.dumps(v, default=str)) > 10_000:
+            raise ValueError("Filter payload too large (max 10 KB)")
+        if _json_depth(v) > 4:
+            raise ValueError("Filter structure too deeply nested (max 4 levels)")
+        return v
 
 
 class SavedScreenOut(BaseModel):

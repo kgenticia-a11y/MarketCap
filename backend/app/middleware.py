@@ -61,8 +61,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """Generate / propagate an X-Request-ID per request and stamp it on the response."""
 
     async def dispatch(self, request: Request, call_next):
-        rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
-        # Stash on request.state so handlers + log filters can read it.
+        rid = request.headers.get("x-request-id") or ""
+        if not rid or len(rid) > 64 or not rid.isascii() or not rid.isprintable():
+            rid = uuid.uuid4().hex[:12]
         request.state.request_id = rid
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid
@@ -82,6 +83,11 @@ class BodySizeLimiter(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"Payload too large (max {self.max_bytes} bytes)"},
+            )
+        if request.method in ("POST", "PUT", "PATCH") and not cl:
+            return JSONResponse(
+                status_code=411,
+                content={"detail": "Content-Length header required."},
             )
         return await call_next(request)
 

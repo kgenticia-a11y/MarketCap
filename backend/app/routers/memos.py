@@ -8,6 +8,7 @@ from a missing one (404), never a 403 that would leak existence.
 """
 
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -451,7 +452,7 @@ async def auto_checkpoint(
     """
     if not settings.checkpoint_cron_secret:
         raise HTTPException(503, "Auto-checkpoint disabled — CHECKPOINT_CRON_SECRET not configured.")
-    if x_checkpoint_secret != settings.checkpoint_cron_secret:
+    if not secrets.compare_digest(x_checkpoint_secret, settings.checkpoint_cron_secret):
         raise HTTPException(401, "Bad checkpoint secret.")
 
     memos = (
