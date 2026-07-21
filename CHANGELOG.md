@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-07-21 — Investment memos + thesis tracking
+
+New guided workflow for evaluating a stock the way a corp-dev team evaluates
+an acquisition — and then holding your past self accountable when the market
+proves the thesis right or wrong.
+
+### Added
+
+- **Investment Memos**. Five new Supabase tables (`investment_memos`,
+  `moat_scorecards`, `comps_analyses`, `dcf_scenarios`,
+  `thesis_checkpoints`) plus 15 new API endpoints (`/memos/*`, `/dcf/*`,
+  `/memos/{id}/checkpoints`, `/memos/performance`,
+  `/internal/auto-checkpoint`). Per-user isolation is enforced in the API
+  layer with `WHERE user_id = current_user.id` on every query, matching the
+  existing RLS-deny-all pattern.
+- **Memo builder UI** at `/memos`, `/memos/new`, `/memos/:id/edit`,
+  `/memos/:id`. Seven guided sections (ticker, business overview, moat
+  scorecard, financial health, valuation, risks, thesis) with
+  dirty-field-tracked autosave (2 s debounce, flush on blur/beforeunload),
+  a live financial snapshot sidebar, and a publish flow that snapshots
+  today's price as the permanent tracking reference point.
+- **Comps table** in the Valuation section: peer ticker chips, live P/E,
+  EV/EBITDA, revenue growth, gross margin from Yahoo, peer-median row, and
+  a subject-vs-peers delta on the highlighted row.
+- **Guided DCF calculator** in the Valuation section: base / bull / bear
+  scenario tabs with sensible defaults (base seeded from live
+  fundamentals), sliders for growth / margin / tax / WACC / terminal
+  growth, projected FCF table, and fair-value-per-share output with upside
+  vs current price. Idempotent save-per-scenario-name via POST-then-PATCH.
+- **Thesis reflections** on the read-only view: manual reflection button
+  snapshots current price and lets you annotate what changed, plus a price
+  sparkline and chronological checkpoint list.
+- **Weekly auto-checkpoint** cron via Supabase pg_cron + pg_net (Sundays
+  07:00 UTC) hitting the secret-gated backend endpoint. Two vault secrets
+  must be set out-of-band before the schedule fires:
+  `marketcap_backend_url` and `marketcap_checkpoint_key` (matches the
+  backend's `CHECKPOINT_CRON_SECRET`).
+- **Thesis performance dashboard** at `/memos/performance`: aggregate
+  stats, per-memo sparklines, sorted worst-first so painful memos surface
+  where the learning is.
+- **30-day reflection nudge** on Home: highlights memos that haven't been
+  reflected on in 30+ days; hidden entirely when nothing is stale.
+- **`/stocks/fundamentals/{ticker}`** service endpoint — 30 min TTL,
+  single-flight coalesced, powers both the financial snapshot sidebar and
+  the DCF base-case defaults.
+
+### Migrations
+
+- `20260720140000_create_memo_tables.sql` — memo/moat/comps/dcf/checkpoint
+  tables with RLS deny-all policies (applied).
+- `20260721100000_weekly_memo_checkpoint_cron.sql` — installs the pg_cron
+  schedule (idempotent: unschedules any prior job of the same name).
+  **Not applied automatically** — run `supabase db push` or apply via the
+  Supabase dashboard after setting the two vault secrets above.
+
 ## 2026-07-20 — Feature-pruning pass
 
 Refocusing the product on the upcoming guided investment-memo / thesis-tracking

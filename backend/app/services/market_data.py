@@ -433,6 +433,85 @@ async def get_ticker_details(ticker: str) -> dict:
     return await _singleflight(_inflight_details, t, lambda: _fetch_details_async(t))
 
 
+# ── Fundamentals (memo builder / comps) ────────────────────────────────────
+
+# Fundamentals move on quarterly reports, not intraday — cache generously.
+_FUNDAMENTALS_TTL     = 1_800                    # 30 min
+_FUNDAMENTALS_SWR_MAX = _FUNDAMENTALS_TTL * 4    # 2 h
+_fundamentals_cache: _BoundedTTLCache = _BoundedTTLCache(_DETAILS_CACHE_MAX)
+_inflight_fundamentals: dict[str, asyncio.Future] = {}
+
+
+def _pct(value):
+    """yfinance reports margins/growth as fractions (0.42) — convert to %."""
+    return round(value * 100, 2) if isinstance(value, (int, float)) else None
+
+
+def _fetch_fundamentals(ticker: str) -> dict:
+    """Compact fundamental snapshot for the memo builder's financial-health
+    sidebar and the comps table: one bounded .info call, no statement
+    downloads (those live in the analyst-report path and take 10s+)."""
+    t = yf.Ticker(ticker)
+    try:
+        fast_market_cap = t.fast_info.market_cap or 0
+    except Exception:
+        fast_market_cap = 0
+
+    info = _info_with_timeout(ticker, _INFO_TIMEOUT)
+    g = info.get
+
+    # yfinance reports debtToEquity as a percentage (e.g. 154.5) — normalise
+    # to the plain ratio the UI displays (1.55).
+    dte = g("debtToEquity")
+    debt_to_equity = round(dte / 100, 2) if isinstance(dte, (int, float)) else None
+
+    return {
+        "ticker": ticker.upper(),
+        "name": g("longName") or g("shortName", ""),
+        "market_cap": g("marketCap") or fast_market_cap or None,
+        "price": g("currentPrice"),
+        "pe": g("trailingPE"),
+        "forward_pe": g("forwardPE"),
+        "ps": g("priceToSalesTrailing12Months"),
+        "ev_to_ebitda": g("enterpriseToEbitda"),
+        "revenue_growth_pct": _pct(g("revenueGrowth")),
+        "earnings_growth_pct": _pct(g("earningsGrowth")),
+        "gross_margin_pct": _pct(g("grossMargins")),
+        "operating_margin_pct": _pct(g("operatingMargins")),
+        "profit_margin_pct": _pct(g("profitMargins")),
+        "debt_to_equity": debt_to_equity,
+        "current_ratio": g("currentRatio"),
+        "roe_pct": _pct(g("returnOnEquity")),
+        "free_cash_flow": g("freeCashflow"),
+        # DCF base inputs — trailing revenue, share count, and net-debt parts.
+        "total_revenue": g("totalRevenue"),
+        "shares_outstanding": g("sharesOutstanding"),
+        "total_debt": g("totalDebt"),
+        "total_cash": g("totalCash"),
+    }
+
+
+async def _fetch_fundamentals_async(t: str) -> dict:
+    result = await _run(_fetch_fundamentals, t)
+    _fundamentals_cache.set(t, result, time.time())
+    return result
+
+
+async def get_fundamentals(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _fundamentals_cache.get(t)
+    if entry is not None:
+        age = now - entry[1]
+        if age < _FUNDAMENTALS_TTL:
+            return entry[0]
+        if age < _FUNDAMENTALS_SWR_MAX:
+            return _swr_serve_and_refresh(
+                t, entry, _inflight_fundamentals, lambda: _fetch_fundamentals_async(t)
+            )
+    return await _singleflight(_inflight_fundamentals, t, lambda: _fetch_fundamentals_async(t))
+
+
 # ── Market Overview ────────────────────────────────────────────────────────
 
 def _fetch_indices() -> list[dict]:

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import JSON, Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -52,6 +53,7 @@ class User(Base):
     portfolios   = relationship("Portfolio",    back_populates="owner", cascade="all, delete")
     watchlist    = relationship("Watchlist",    back_populates="owner", cascade="all, delete")
     saved_screens = relationship("SavedScreen", cascade="all, delete")
+    memos        = relationship("InvestmentMemo", back_populates="owner", cascade="all, delete")
 
 
 class Portfolio(Base):
@@ -173,6 +175,115 @@ class AIEarningsBrief(Base):
     created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (UniqueConstraint("ticker", "earnings_date"),)
+
+
+class InvestmentMemo(Base):
+    """A structured investment memo a user writes about one ticker.
+
+    The memo is the anchor of the guided-research workflow: 1:1 children
+    (MoatScorecard, CompsAnalysis), N scenario rows (DcfScenario), and the
+    thesis-tracking log (ThesisCheckpoint) all hang off it. `price_at_memo`
+    and `published_at` are stamped on first publish and never overwritten —
+    they are the fixed reference point every later checkpoint measures
+    against.
+    """
+    __tablename__ = "investment_memos"
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    user_id                = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    ticker                 = Column(String, nullable=False)
+    status                 = Column(String, nullable=False, default="draft")  # draft | published | archived
+    created_at             = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at             = Column(DateTime(timezone=True),
+                                    default=lambda: datetime.now(timezone.utc),
+                                    onupdate=lambda: datetime.now(timezone.utc))
+    published_at           = Column(DateTime(timezone=True), nullable=True)
+    business_overview      = Column(String, nullable=True)
+    moat_notes             = Column(String, nullable=True)
+    financial_health_notes = Column(String, nullable=True)
+    valuation_notes        = Column(String, nullable=True)
+    risks                  = Column(String, nullable=True)
+    thesis_summary         = Column(String, nullable=True)
+    recommendation         = Column(String, nullable=True)   # buy | hold | pass | watch
+    price_at_memo          = Column(Float, nullable=True)
+    price_target           = Column(Float, nullable=True)
+    target_horizon_months  = Column(Integer, nullable=True)
+
+    owner       = relationship("User", back_populates="memos")
+    moat        = relationship("MoatScorecard", back_populates="memo", cascade="all, delete", uselist=False)
+    comps       = relationship("CompsAnalysis", back_populates="memo", cascade="all, delete", uselist=False)
+    scenarios   = relationship("DcfScenario", back_populates="memo", cascade="all, delete")
+    checkpoints = relationship("ThesisCheckpoint", back_populates="memo", cascade="all, delete")
+
+
+class MoatScorecard(Base):
+    """Five 1-5 moat-dimension ratings, one row per memo."""
+    __tablename__ = "moat_scorecards"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    memo_id          = Column(Integer, ForeignKey("investment_memos.id"), nullable=False, unique=True)
+    pricing_power    = Column(Integer, nullable=True)   # 1-5
+    switching_costs  = Column(Integer, nullable=True)   # 1-5
+    network_effects  = Column(Integer, nullable=True)   # 1-5
+    scale_advantages = Column(Integer, nullable=True)   # 1-5
+    brand_moat       = Column(Integer, nullable=True)   # 1-5
+    notes            = Column(String, nullable=True)
+
+    memo = relationship("InvestmentMemo", back_populates="moat")
+
+
+class CompsAnalysis(Base):
+    """Peer-comparison ticker list for a memo's valuation section."""
+    __tablename__ = "comps_analyses"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    memo_id      = Column(Integer, ForeignKey("investment_memos.id"), nullable=False, unique=True)
+    # text[] on Postgres (matches the Supabase migration); JSON on SQLite dev
+    # where ARRAY doesn't exist — both round-trip a Python list[str].
+    peer_tickers = Column(ARRAY(String).with_variant(JSON(), "sqlite"), nullable=False, default=list)
+    notes        = Column(String, nullable=True)
+
+    memo = relationship("InvestmentMemo", back_populates="comps")
+
+
+class DcfScenario(Base):
+    """One saved DCF assumption set (base / bull / bear / custom) per row."""
+    __tablename__ = "dcf_scenarios"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    memo_id              = Column(Integer, ForeignKey("investment_memos.id"), nullable=False, index=True)
+    scenario_name        = Column(String, nullable=False)
+    revenue_growth_pct   = Column(Float, nullable=False)
+    operating_margin_pct = Column(Float, nullable=False)
+    tax_rate_pct         = Column(Float, nullable=False, default=21.0)
+    discount_rate_pct    = Column(Float, nullable=False)
+    terminal_growth_pct  = Column(Float, nullable=False)
+    projection_years     = Column(Integer, nullable=False, default=5)
+    fair_value_per_share = Column(Float, nullable=True)
+    created_at           = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    memo = relationship("InvestmentMemo", back_populates="scenarios")
+    __table_args__ = (UniqueConstraint("memo_id", "scenario_name", name="uq_dcf_scenarios_memo_name"),)
+
+
+class ThesisCheckpoint(Base):
+    """Point-in-time price check against a published memo — the learning loop.
+
+    Rows are append-only; pct_change_since_memo and days_since_memo are
+    computed server-side at creation (from price_at_memo / published_at) so
+    the history stays truthful even if the memo is later edited.
+    """
+    __tablename__ = "thesis_checkpoints"
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    memo_id               = Column(Integer, ForeignKey("investment_memos.id"), nullable=False, index=True)
+    checked_at            = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    price_at_check        = Column(Float, nullable=False)
+    pct_change_since_memo = Column(Float, nullable=False)
+    days_since_memo       = Column(Integer, nullable=False)
+    notes                 = Column(String, nullable=True)
+
+    memo = relationship("InvestmentMemo", back_populates="checkpoints")
 
 
 class Feedback(Base):
