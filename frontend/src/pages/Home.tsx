@@ -86,7 +86,7 @@ export default function Home() {
 
   return (
     <ErrorBoundary label="Dashboard failed to load">
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
       {/* Tab bar */}
       <div className="flex items-center gap-1 border-b border-border pb-0">
         {TABS.map(({ key, label }) => (
@@ -109,7 +109,7 @@ export default function Home() {
       {tab === "overview" && <>
       {/* Index overview */}
       {ovLoading ? (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[0, 1, 2].map((i) => (
             <div key={i} className="bg-surface rounded-xl border border-border h-24 animate-pulse" />
           ))}
@@ -129,7 +129,7 @@ export default function Home() {
       <DailyBriefCard />
 
       {/* Gainers & Losers */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-surface rounded-xl border border-border overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-positive" />

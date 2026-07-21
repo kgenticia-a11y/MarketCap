@@ -20,8 +20,8 @@ export default function Layout({ title, children, fullHeight }: Props) {
       <Sidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         <TickerBar title={title} onMenuClick={() => setMobileNavOpen(true)} />
-        <main className={fullHeight ? "flex-1 flex flex-col overflow-hidden" : "flex-1 overflow-y-auto"}>
-          <div key={pathname} className={`page-enter ${fullHeight ? "flex-1 flex flex-col h-full" : ""}`}>
+        <main className={fullHeight ? "flex-1 overflow-y-auto lg:flex lg:flex-col lg:overflow-hidden" : "flex-1 overflow-y-auto"}>
+          <div key={pathname} className={`page-enter ${fullHeight ? "lg:flex-1 lg:flex lg:flex-col lg:h-full" : ""}`}>
             {children}
           </div>
         </main>

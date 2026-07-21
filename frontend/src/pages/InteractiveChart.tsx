@@ -183,24 +183,25 @@ export default function InteractiveChart() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col lg:h-full">
       {/* Stock tabs + search — outer wrapper has NO overflow so the dropdown isn't clipped */}
       <div className="flex items-center border-b border-border bg-sidebar">
         {/* Scrollable tab strip */}
-        <div className="flex items-center gap-1 px-4 py-3 flex-1 overflow-x-auto min-w-0">
+        <div className="flex items-center gap-1 px-3 sm:px-4 py-3 flex-1 overflow-x-auto hide-scrollbar min-w-0">
           {tabs.map((tab) => (
             <button
               key={tab.ticker}
               onClick={() => setActiveTicker(tab.ticker)}
               className={clsx(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all group",
+                "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all group",
                 activeTicker === tab.ticker
                   ? "bg-accent text-white shadow-lg shadow-accent/30"
                   : "text-muted hover:text-white hover:bg-surface-hover"
               )}
             >
               <span>{TICKER_ICONS[tab.ticker] ?? "📈"}</span>
-              {tab.name}
+              <span className="hidden sm:inline">{tab.name}</span>
+              <span className="sm:hidden">{tab.ticker}</span>
               {tab.removable && (
                 <span
                   role="button"
@@ -220,21 +221,21 @@ export default function InteractiveChart() {
         </div>
 
         {/* Search pinned to the right — outside the overflow container */}
-        <div className="px-3 py-3 shrink-0 border-l border-border/50">
+        <div className="px-2 sm:px-3 py-3 shrink-0 border-l border-border/50">
           <TickerSearch onSelect={addTab} />
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Main content — stacks vertically on mobile, side-by-side on desktop */}
+      <div className="flex flex-col lg:flex-row lg:flex-1 lg:overflow-hidden">
         {/* Chart area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Chart header */}
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-4">
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-white">
+        <div className="flex flex-col lg:flex-1 lg:overflow-hidden">
+          {/* Chart header — two rows on mobile, one row on desktop */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-xl sm:text-2xl font-bold text-white">
                     ${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className={clsx(
@@ -250,54 +251,55 @@ export default function InteractiveChart() {
                 </div>
               </div>
 
-              {/* Range selector */}
-              <div className="flex items-center gap-0.5 bg-surface rounded-lg p-1 ml-4">
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRange(r)}
-                    className={clsx(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
-                      range === r
-                        ? "bg-accent text-white"
-                        : "text-muted hover:text-white"
-                    )}
-                  >
-                    {r}
-                  </button>
-                ))}
+              {/* Action buttons — icon-only on mobile, label on sm+ */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {user && (
+                  <>
+                    <button
+                      onClick={() => watchMutation.mutate()}
+                      className={clsx(
+                        "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                        isWatched
+                          ? "border-accent/50 bg-accent/10 text-accent-light"
+                          : "border-border text-muted hover:text-white hover:border-border-strong"
+                      )}
+                    >
+                      <Star size={13} fill={isWatched ? "currentColor" : "none"} />
+                      <span className="hidden sm:inline">{isWatched ? "Watching" : "Watch"}</span>
+                    </button>
+                    <button
+                      onClick={openPortModal}
+                      className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-accent hover:bg-accent/90 text-white transition-all shadow-lg shadow-accent/20"
+                    >
+                      <Plus size={13} />
+                      <span className="hidden sm:inline">Add to Portfolio</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {user && (
-                <>
-                  <button
-                    onClick={() => watchMutation.mutate()}
-                    className={clsx(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-                      isWatched
-                        ? "border-accent/50 bg-accent/10 text-accent-light"
-                        : "border-border text-muted hover:text-white hover:border-border-strong"
-                    )}
-                  >
-                    <Star size={13} fill={isWatched ? "currentColor" : "none"} />
-                    {isWatched ? "Watching" : "Watch"}
-                  </button>
-                  <button
-                    onClick={openPortModal}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent hover:bg-accent/90 text-white transition-all shadow-lg shadow-accent/20"
-                  >
-                    <Plus size={13} />
-                    Add to Portfolio
-                  </button>
-                </>
-              )}
+            {/* Range selector — full-width scrollable on mobile */}
+            <div className="flex items-center gap-0.5 bg-surface rounded-lg p-1 overflow-x-auto hide-scrollbar">
+              {RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={clsx(
+                    "px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap",
+                    range === r
+                      ? "bg-accent text-white"
+                      : "text-muted hover:text-white"
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Chart */}
-          <div className="flex-1 px-4 pb-4 min-h-0">
+          {/* Chart — fixed height on mobile, fills remaining space on desktop */}
+          <div className="h-[300px] sm:h-[360px] lg:flex-1 lg:h-auto px-4 pb-4 lg:min-h-0">
             {chartLoading ? (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
@@ -310,39 +312,41 @@ export default function InteractiveChart() {
           </div>
 
           {/* Top Value List */}
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-4 sm:pb-6">
             <div className="bg-surface rounded-xl border border-border overflow-hidden">
-              <div className="px-5 py-3 border-b border-border">
+              <div className="px-4 sm:px-5 py-3 border-b border-border">
                 <h3 className="text-sm font-semibold text-white">Top value list</h3>
               </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left px-5 py-2.5 text-muted font-medium">Instrument</th>
-                    <th className="text-right px-4 py-2.5 text-muted font-medium">LTP</th>
-                    <th className="text-right px-4 py-2.5 text-muted font-medium">%</th>
-                    <th className="text-right px-4 py-2.5 text-muted font-medium">Value</th>
-                    <th className="text-right px-5 py-2.5 text-muted font-medium">Volume</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tabs.map((tab) => (
-                    <TopValueRow
-                      key={tab.ticker}
-                      ticker={tab.ticker}
-                      name={tab.name}
-                      active={tab.ticker === activeTicker}
-                      onClick={() => setActiveTicker(tab.ticker)}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left px-4 sm:px-5 py-2.5 text-muted font-medium">Instrument</th>
+                      <th className="text-right px-3 sm:px-4 py-2.5 text-muted font-medium">LTP</th>
+                      <th className="text-right px-3 sm:px-4 py-2.5 text-muted font-medium">%</th>
+                      <th className="text-right px-3 sm:px-4 py-2.5 text-muted font-medium hidden sm:table-cell">Value</th>
+                      <th className="text-right px-4 sm:px-5 py-2.5 text-muted font-medium hidden sm:table-cell">Volume</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tabs.map((tab) => (
+                      <TopValueRow
+                        key={tab.ticker}
+                        ticker={tab.ticker}
+                        name={tab.name}
+                        active={tab.ticker === activeTicker}
+                        onClick={() => setActiveTicker(tab.ticker)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right panel — AI */}
-        <aside className="w-72 shrink-0 border-l border-border overflow-y-auto bg-sidebar">
+        {/* Right panel — AI: full width below chart on mobile, fixed sidebar on desktop */}
+        <aside className="w-full lg:w-72 lg:shrink-0 border-t lg:border-t-0 lg:border-l border-border lg:overflow-y-auto bg-sidebar">
           <AIChartAnalysisPanel
             ticker={activeTicker}
             range={range}
@@ -429,16 +433,16 @@ function TopValueRow({
         active ? "bg-accent/5" : "hover:bg-surface-hover"
       )}
     >
-      <td className="px-5 py-2.5">
+      <td className="px-4 sm:px-5 py-2.5">
         <div className={clsx("font-semibold", active ? "text-accent-light" : "text-white")}>{ticker}</div>
-        <div className="text-[10px] text-muted truncate max-w-[120px]">{name}</div>
+        <div className="text-[10px] text-muted truncate max-w-[100px] sm:max-w-[120px]">{name}</div>
       </td>
-      <td className="px-4 py-2.5 text-right text-white">{price.toFixed(2)}</td>
-      <td className={clsx("px-4 py-2.5 text-right font-medium", positive ? "text-positive" : "text-negative")}>
+      <td className="px-3 sm:px-4 py-2.5 text-right text-white">{price.toFixed(2)}</td>
+      <td className={clsx("px-3 sm:px-4 py-2.5 text-right font-medium", positive ? "text-positive" : "text-negative")}>
         {positive ? "+" : ""}{changePct.toFixed(2)}%
       </td>
-      <td className="px-4 py-2.5 text-right text-muted">{(price * volume / 1e9).toFixed(2)}B</td>
-      <td className="px-5 py-2.5 text-right">
+      <td className="px-3 sm:px-4 py-2.5 text-right text-muted hidden sm:table-cell">{(price * volume / 1e9).toFixed(2)}B</td>
+      <td className="px-4 sm:px-5 py-2.5 text-right hidden sm:table-cell">
         <div className="flex items-end justify-end gap-px h-5">
           {[0.4, 0.6, 0.3, 0.8, 0.5, 1.0, barH / 100].map((h, i) => (
             <div
