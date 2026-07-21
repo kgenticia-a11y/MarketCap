@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # X-Admin-Token header. If unset, the admin router returns 503.
     admin_token: str = ""
 
+    # Internal cron endpoints (weekly auto-checkpoint on published memos)
+    # require this shared secret in the X-Checkpoint-Secret header. If unset,
+    # the endpoint returns 503 — no default so a missing secret can't be
+    # silently exercised.
+    checkpoint_cron_secret: str = ""
+
     # Auto-fixer scheduler — disabled by default so production servers don't
     # rewrite their own source code at runtime.
     auto_fixer_enabled: bool = False

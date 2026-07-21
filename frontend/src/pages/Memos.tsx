@@ -5,7 +5,7 @@ import { listMemos, type Memo, type MemoStatus } from "../api/memos";
 import { useBatchedQuotes } from "../hooks/useBatchedQuotes";
 import { RecommendationBadge, StatusBadge } from "../components/MemoBadges";
 import { fmtPrice, fmtPct, pctSince } from "../utils/memo";
-import { NotebookPen, Plus } from "lucide-react";
+import { LineChart, NotebookPen, Plus } from "lucide-react";
 import { clsx } from "clsx";
 
 const FILTERS: Array<{ label: string; value: MemoStatus | "all" }> = [
@@ -84,13 +84,22 @@ export default function Memos() {
             </button>
           ))}
         </div>
-        <Link
-          to="/memos/new"
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-accent hover:bg-accent/90 text-white transition-all shadow-lg shadow-accent/20"
-        >
-          <Plus size={15} />
-          New memo
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/memos/performance"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium border border-border text-muted hover:text-white hover:border-border-strong transition-all"
+          >
+            <LineChart size={14} />
+            Performance
+          </Link>
+          <Link
+            to="/memos/new"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-accent hover:bg-accent/90 text-white transition-all shadow-lg shadow-accent/20"
+          >
+            <Plus size={15} />
+            New memo
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (

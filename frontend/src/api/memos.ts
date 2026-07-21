@@ -97,8 +97,27 @@ export interface DcfScenarioInput {
   fair_value_per_share: number | null;
 }
 
+export interface MemoPerformanceRow {
+  memo_id: number;
+  ticker: string;
+  recommendation: MemoRecommendation | null;
+  published_at: string;
+  price_at_memo: number;
+  price_target: number | null;
+  current_price: number | null;
+  pct_change: number | null;
+  days_since_memo: number;
+  checkpoints_count: number;
+  last_checkpoint_at: string | null;
+  days_since_last_reflection: number | null;
+  price_series: number[];
+}
+
 export const listMemos = (params?: { status?: MemoStatus; ticker?: string }) =>
   client.get("/memos", { params }).then((r) => r.data as Memo[]);
+
+export const getMemoPerformance = () =>
+  client.get("/memos/performance").then((r) => r.data as MemoPerformanceRow[]);
 
 export const createMemo = (ticker: string) =>
   client.post("/memos", { ticker }).then((r) => r.data as Memo);

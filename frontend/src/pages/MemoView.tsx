@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { getMemo } from "../api/memos";
 import { getQuote } from "../api/stocks";
+import CheckpointPanel from "../components/CheckpointPanel";
 import { RecommendationBadge, StatusBadge } from "../components/MemoBadges";
 import { MOAT_DIMENSIONS, daysSince, fmtPct, fmtPrice, pctSince } from "../utils/memo";
 import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
@@ -221,6 +222,8 @@ export default function MemoView() {
         )}
 
         <ProseSection title="Risks" text={memo.risks} />
+
+        <CheckpointPanel memoId={memo.id} published={memo.status === "published"} />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getMarketOverview } from "../api/stocks";
 import ErrorBoundary from "../components/ErrorBoundary";
 import DailyBriefCard from "../components/DailyBriefCard";
+import ThesisNudgeCard from "../components/ThesisNudgeCard";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -120,6 +121,9 @@ export default function Home() {
           ))}
         </div>
       )}
+
+      {/* Nudge users to reflect on stale memos before daily brief demands attention. */}
+      <ThesisNudgeCard />
 
       {/* AI Daily Brief */}
       <DailyBriefCard />

@@ -261,6 +261,22 @@ class MemoDetailOut(MemoOut):
     scenarios: list[DcfScenarioOut] = []
 
 
+class MemoPerformanceRow(BaseModel):
+    memo_id: int
+    ticker: str
+    recommendation: Optional[MemoRecommendation] = None
+    published_at: datetime
+    price_at_memo: float
+    price_target: Optional[float] = None
+    current_price: Optional[float] = None
+    pct_change: Optional[float] = None
+    days_since_memo: int
+    checkpoints_count: int
+    last_checkpoint_at: Optional[datetime] = None
+    days_since_last_reflection: Optional[int] = None
+    price_series: list[float] = []
+
+
 # --- Watchlist ---
 
 class WatchlistItemOut(BaseModel):

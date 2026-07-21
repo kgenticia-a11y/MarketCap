@@ -11,11 +11,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas, auth
+from app.config import settings
 from app.database import get_db
 from app.services import market_data
 
@@ -51,6 +52,100 @@ async def _current_price(ticker: str) -> float:
 
 
 # ── Memo CRUD ────────────────────────────────────────────────────────────
+
+
+@router.get("/memos/performance", response_model=list[schemas.MemoPerformanceRow])
+async def memo_performance(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Aggregate view of every published memo for the current user.
+
+    Fans out one quote per unique ticker (deduped), then folds current price,
+    days-since-memo, checkpoint count, and a price trail (memo → each
+    checkpoint → current) into a single row per memo.
+    """
+    memos = (
+        db.query(models.InvestmentMemo)
+        .filter(models.InvestmentMemo.user_id == current_user.id)
+        .filter(models.InvestmentMemo.status == "published")
+        .filter(models.InvestmentMemo.published_at.isnot(None))
+        .filter(models.InvestmentMemo.price_at_memo.isnot(None))
+        .order_by(models.InvestmentMemo.published_at.desc())
+        .all()
+    )
+    if not memos:
+        return []
+
+    tickers = sorted({m.ticker for m in memos})
+    prices: dict[str, float] = {}
+    for ticker in tickers:
+        try:
+            quote = await market_data.get_quote(ticker)
+        except Exception:
+            logger.warning("performance: quote failed for %s", ticker)
+            continue
+        p = quote.get("price")
+        if p and p > 0:
+            prices[ticker] = float(p)
+
+    checkpoints_by_memo: dict[int, list[models.ThesisCheckpoint]] = {}
+    if memos:
+        rows = (
+            db.query(models.ThesisCheckpoint)
+            .filter(models.ThesisCheckpoint.memo_id.in_([m.id for m in memos]))
+            .order_by(models.ThesisCheckpoint.checked_at)
+            .all()
+        )
+        for r in rows:
+            checkpoints_by_memo.setdefault(r.memo_id, []).append(r)
+
+    now = datetime.now(timezone.utc)
+    out: list[schemas.MemoPerformanceRow] = []
+    for memo in memos:
+        published_at = memo.published_at
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        current_price = prices.get(memo.ticker)
+        pct = None
+        if current_price is not None and memo.price_at_memo:
+            pct = round((current_price - memo.price_at_memo) / memo.price_at_memo * 100, 2)
+
+        memo_checkpoints = checkpoints_by_memo.get(memo.id, [])
+        last_ck = memo_checkpoints[-1] if memo_checkpoints else None
+        last_ck_at = None
+        days_since_reflection = None
+        if last_ck:
+            last_ck_at = last_ck.checked_at
+            if last_ck_at.tzinfo is None:
+                last_ck_at = last_ck_at.replace(tzinfo=timezone.utc)
+            days_since_reflection = max(0, (now - last_ck_at).days)
+        elif published_at:
+            days_since_reflection = max(0, (now - published_at).days)
+
+        series = [memo.price_at_memo] + [c.price_at_check for c in memo_checkpoints]
+        if current_price is not None:
+            series.append(current_price)
+
+        out.append(schemas.MemoPerformanceRow(
+            memo_id=memo.id,
+            ticker=memo.ticker,
+            recommendation=memo.recommendation,
+            published_at=published_at,
+            price_at_memo=memo.price_at_memo,
+            price_target=memo.price_target,
+            current_price=current_price,
+            pct_change=pct,
+            days_since_memo=max(0, (now - published_at).days),
+            checkpoints_count=len(memo_checkpoints),
+            last_checkpoint_at=last_ck_at,
+            days_since_last_reflection=days_since_reflection,
+            price_series=series,
+        ))
+
+    # Sort worst-first so painful memos surface — that's where the learning is.
+    out.sort(key=lambda r: (r.pct_change if r.pct_change is not None else 0))
+    return out
 
 
 @router.post("/memos", response_model=schemas.MemoOut, status_code=201)
@@ -340,3 +435,63 @@ def list_checkpoints(
         .order_by(models.ThesisCheckpoint.checked_at)
         .all()
     )
+
+
+# ── Internal cron: weekly auto-checkpoint on every published memo ────────
+
+
+@router.post("/internal/auto-checkpoint")
+async def auto_checkpoint(
+    x_checkpoint_secret: str = Header(default=""),
+    db: Session = Depends(get_db),
+):
+    """Called by Supabase pg_cron once a week. Fans out one quote per
+    unique ticker (not per memo) to keep Yahoo happy, then inserts a
+    checkpoint on every published memo for that ticker.
+    """
+    if not settings.checkpoint_cron_secret:
+        raise HTTPException(503, "Auto-checkpoint disabled — CHECKPOINT_CRON_SECRET not configured.")
+    if x_checkpoint_secret != settings.checkpoint_cron_secret:
+        raise HTTPException(401, "Bad checkpoint secret.")
+
+    memos = (
+        db.query(models.InvestmentMemo)
+        .filter(models.InvestmentMemo.status == "published")
+        .filter(models.InvestmentMemo.published_at.isnot(None))
+        .filter(models.InvestmentMemo.price_at_memo.isnot(None))
+        .all()
+    )
+    tickers = sorted({m.ticker for m in memos})
+
+    prices: dict[str, float] = {}
+    for ticker in tickers:
+        try:
+            quote = await market_data.get_quote(ticker)
+        except Exception:
+            logger.warning("auto-checkpoint: quote failed for %s", ticker)
+            continue
+        price = quote.get("price")
+        if price and price > 0:
+            prices[ticker] = float(price)
+
+    now = datetime.now(timezone.utc)
+    created = 0
+    skipped = 0
+    for memo in memos:
+        price = prices.get(memo.ticker)
+        if not price:
+            skipped += 1
+            continue
+        published_at = memo.published_at
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        db.add(models.ThesisCheckpoint(
+            memo_id=memo.id,
+            price_at_check=price,
+            pct_change_since_memo=round((price - memo.price_at_memo) / memo.price_at_memo * 100, 2),
+            days_since_memo=max(0, (now - published_at).days),
+            notes="[auto]",
+        ))
+        created += 1
+    db.commit()
+    return {"tickers_priced": len(prices), "checkpoints_created": created, "skipped": skipped}

@@ -23,6 +23,7 @@ import Memos from "./pages/Memos";
 import MemoNew from "./pages/MemoNew";
 import MemoEdit from "./pages/MemoEdit";
 import MemoView from "./pages/MemoView";
+import MemoPerformance from "./pages/MemoPerformance";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
 function Private({ title, fullHeight, children }: {
@@ -58,10 +59,11 @@ function AppRoutes() {
         <Route path="/paper-trading" element={<Private title="Paper Trading"><PaperTrading /></Private>} />
       )}
       <Route path="/analyst-report" element={<Private title="Analyst Report"><AnalystReport /></Private>} />
-      <Route path="/memos"          element={<Private title="Investment Memos"><Memos /></Private>} />
-      <Route path="/memos/new"      element={<Private title="New Memo"><MemoNew /></Private>} />
-      <Route path="/memos/:id/edit" element={<Private title="Edit Memo"><MemoEdit /></Private>} />
-      <Route path="/memos/:id"      element={<Private title="Investment Memo"><MemoView /></Private>} />
+      <Route path="/memos"             element={<Private title="Investment Memos"><Memos /></Private>} />
+      <Route path="/memos/new"         element={<Private title="New Memo"><MemoNew /></Private>} />
+      <Route path="/memos/performance" element={<Private title="Thesis Performance"><MemoPerformance /></Private>} />
+      <Route path="/memos/:id/edit"    element={<Private title="Edit Memo"><MemoEdit /></Private>} />
+      <Route path="/memos/:id"         element={<Private title="Investment Memo"><MemoView /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}
       <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />
