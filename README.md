@@ -42,6 +42,10 @@ Open <http://localhost:5173>.
 - Income estimator (dividend projection)
 - Interactive candlestick chart
 - Institutional-format analyst report (AI-narrative or docs-driven)
+- **Investment memos**: guided workflow for evaluating a stock
+  (business / moat / financials / valuation / risks / thesis), with a
+  comps table, base/bull/bear DCF calculator, and thesis-tracking
+  reflections that snapshot price at publish and check in weekly.
 - AI co-pilot: daily brief, chart analysis, pre-earnings briefs, chat assistant
 - Dark + light mode, customisable accent colour
 - ⌘K search with arrow-key navigation and recent searches
@@ -62,6 +66,7 @@ All backend settings live in `backend/.env`. See `backend/.env.example` for the 
 | `ADMIN_TOKEN`             | Required header for `/admin/*` — empty disables admin      |
 | `AUTO_FIXER_ENABLED`      | Run the local code auto-fixer every N hours (dev only)     |
 | `AUTO_FIXER_INTERVAL_HOURS` | Interval for the auto-fixer loop                         |
+| `CHECKPOINT_CRON_SECRET`  | Shared secret for the weekly memo auto-checkpoint endpoint. Must match the `marketcap_checkpoint_key` vault secret in Supabase. Empty disables the endpoint. |
 
 Frontend config is in `frontend/.env` — only `VITE_API_URL`.
 
