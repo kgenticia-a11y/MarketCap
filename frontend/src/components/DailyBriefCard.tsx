@@ -7,7 +7,7 @@ export default function DailyBriefCard() {
     queryKey: ["daily-brief"],
     queryFn: getDailyBrief,
     staleTime: Infinity,
-    retry: false,
+    retry: 1,
   });
 
   return (

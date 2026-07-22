@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import date as date_type, datetime, timedelta, timezone
 from typing import Any
 
@@ -16,6 +17,22 @@ from app.services import ai_guard, market_data, claude
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+# ── In-process AI caches ───────────────────────────────────────────────────
+# Per-user brief cache: every page reload re-called Groq (5-30s) even though
+# the brief content is valid for 15 minutes. staleTime:Infinity in the client
+# prevents in-session re-fetches; this covers cross-session hits (new tab,
+# manual reload). TTL kept below Groq's own token-rate reset window.
+_BRIEF_CACHE_TTL = 15 * 60  # 15 minutes
+_brief_cache: dict[int, tuple[str, float]] = {}  # user_id → (brief_text, ts)
+
+# Per-user chat context cache: portfolio holdings + watchlist string for the
+# system prompt. Holdings analytics involve a DB query + N cache reads + string
+# formatting on every single chat message. Cache the formatted strings for 5
+# minutes — short enough that portfolio edits are reflected quickly.
+_CHAT_CTX_TTL = 5 * 60  # 5 minutes
+# user_id → (holdings_lines, watchlist_line, ts)
+_chat_ctx_cache: dict[int, tuple[str, str, float]] = {}
 
 
 def _ai_error_to_http(exc: Exception):
@@ -75,6 +92,11 @@ async def daily_brief(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(_ai_user),
 ):
+    now = time.time()
+    cached_brief = _brief_cache.get(current_user.id)
+    if cached_brief is not None and (now - cached_brief[1]) < _BRIEF_CACHE_TTL:
+        return {"brief": cached_brief[0], "generated_at": datetime.now(timezone.utc).isoformat()}
+
     holdings = await _user_holdings(current_user, db)
 
     total_value = sum(h["value"] for h in holdings)
@@ -149,6 +171,7 @@ Do not use markdown, headers, or bullet points — write flowing prose. Do not p
     except Exception as exc:
         _ai_error_to_http(exc)
 
+    _brief_cache[current_user.id] = (brief, time.time())
     return {"brief": brief, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
@@ -390,17 +413,22 @@ async def chat(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(_ai_user),
 ):
-    holdings = await _user_holdings(current_user, db)
-    holdings_lines = "\n".join(
-        f"- {h['ticker']}: {h['shares']} sh, ${h['value']:,.2f} value, "
-        f"P&L {'+' if h['pnl'] >= 0 else ''}{h['pnl_pct']:.2f}%, beta {h['beta']}"
-        for h in holdings
-    ) or "(no holdings)"
-
-    watchlist = (
-        db.query(models.Watchlist).filter(models.Watchlist.user_id == current_user.id).all()
-    )
-    watchlist_line = ", ".join(w.ticker for w in watchlist) or "(empty)"
+    now = time.time()
+    ctx = _chat_ctx_cache.get(current_user.id)
+    if ctx is not None and (now - ctx[2]) < _CHAT_CTX_TTL:
+        holdings_lines, watchlist_line = ctx[0], ctx[1]
+    else:
+        holdings = await _user_holdings(current_user, db)
+        holdings_lines = "\n".join(
+            f"- {h['ticker']}: {h['shares']} sh, ${h['value']:,.2f} value, "
+            f"P&L {'+' if h['pnl'] >= 0 else ''}{h['pnl_pct']:.2f}%, beta {h['beta']}"
+            for h in holdings
+        ) or "(no holdings)"
+        watchlist = (
+            db.query(models.Watchlist).filter(models.Watchlist.user_id == current_user.id).all()
+        )
+        watchlist_line = ", ".join(w.ticker for w in watchlist) or "(empty)"
+        _chat_ctx_cache[current_user.id] = (holdings_lines, watchlist_line, time.time())
 
     indices = await market_data.get_market_indices()
     index_lines = "\n".join(
