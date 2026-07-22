@@ -135,8 +135,11 @@ _portfolio_cache: _BoundedTTLCache = _BoundedTTLCache(500)
 
 # Indices cache — SPY / QQQ / DIA. _fetch_indices calls the sync _fetch_quote
 # path that bypasses _quote_cache, so without this every daily-brief and chat
-# request fired 3 fresh Yahoo calls.
+# request fired 3 fresh Yahoo calls. The lock single-flights the cold refill so
+# concurrent callers (daily-brief gathers indices + update; chat; stocks.py)
+# share one fetch instead of each firing their own 3-ticker Yahoo call.
 _indices_cache: tuple[list[dict], float] | None = None
+_indices_lock = asyncio.Lock()
 _INDICES_TTL = 60  # seconds
 
 _QUOTE_TTL   =  30   # seconds — price data refreshes frequently
@@ -544,9 +547,19 @@ async def get_market_indices() -> list[dict]:
     now = time.time()
     if _indices_cache is not None and (now - _indices_cache[1]) < _INDICES_TTL:
         return _indices_cache[0]
-    result = await _run(_fetch_indices)
-    _indices_cache = (result, now)
-    return result
+    async with _indices_lock:
+        # Re-check after acquiring: another coroutine may have refilled while
+        # we waited, so we return its result instead of fetching again.
+        now = time.time()
+        if _indices_cache is not None and (now - _indices_cache[1]) < _INDICES_TTL:
+            return _indices_cache[0]
+        result = await _run(_fetch_indices)
+        # Only cache a non-empty result. _fetch_indices returns [] when all
+        # three tickers fail transiently; caching that would hide index data
+        # for the full TTL even after Yahoo recovers.
+        if result:
+            _indices_cache = (result, now)
+        return result
 
 
 # Canonical stock universe — the single source of truth for breadth,
@@ -1605,6 +1618,11 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
             "annual_dividend_per_share": 0, "annual_dividend_income": 0,
             "beta": None,
             "allocation_pct": 0,
+            # Internal marker: this is the degraded cost-basis fallback, not
+            # real market data. The caller strips it and refuses to cache the
+            # row so a transient Yahoo failure can't poison the 60s cache (or
+            # get persisted to portfolio history by the snapshot scheduler).
+            "_fetch_failed": True,
         }
 
 
@@ -1638,6 +1656,11 @@ async def _get_portfolio_item_cached(ticker: str, shares: float, avg_buy_price: 
             "allocation_pct": 0,
         }
     result = await _run(_fetch_portfolio_item, ticker, shares, avg_buy_price)
+    if result.pop("_fetch_failed", False):
+        # Transient upstream failure — serve the cost-basis fallback once but
+        # do NOT cache it, so the next call retries against a (hopefully)
+        # recovered Yahoo instead of reading stale fake data for 60s.
+        return result
     _portfolio_cache.set(t, result, time.time())
     return result
 

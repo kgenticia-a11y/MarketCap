@@ -19,20 +19,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 # ── In-process AI caches ───────────────────────────────────────────────────
+# Both caches are LRU-bounded (not plain dicts) so a large or churning user
+# base can't grow them without bound — the TTL check only decides freshness,
+# it never evicts, so an unbounded dict would leak one entry per user forever.
+# The 500-entry cap mirrors the other per-key caches in market_data.py.
+_BRIEF_CACHE_MAX = 500
+_CHAT_CTX_CACHE_MAX = 500
+
 # Per-user brief cache: every page reload re-called Groq (5-30s) even though
 # the brief content is valid for 15 minutes. staleTime:Infinity in the client
 # prevents in-session re-fetches; this covers cross-session hits (new tab,
-# manual reload). TTL kept below Groq's own token-rate reset window.
+# manual reload). TTL kept below Groq's own token-rate reset window. The stored
+# timestamp is the real generation time, so cache hits report an honest
+# generated_at instead of "now".
 _BRIEF_CACHE_TTL = 15 * 60  # 15 minutes
-_brief_cache: dict[int, tuple[str, float]] = {}  # user_id → (brief_text, ts)
+_brief_cache = market_data._BoundedTTLCache(_BRIEF_CACHE_MAX)  # user_id → (brief_text, gen_ts)
 
 # Per-user chat context cache: portfolio holdings + watchlist string for the
 # system prompt. Holdings analytics involve a DB query + N cache reads + string
 # formatting on every single chat message. Cache the formatted strings for 5
 # minutes — short enough that portfolio edits are reflected quickly.
 _CHAT_CTX_TTL = 5 * 60  # 5 minutes
-# user_id → (holdings_lines, watchlist_line, ts)
-_chat_ctx_cache: dict[int, tuple[str, str, float]] = {}
+# user_id → ((holdings_lines, watchlist_line), ts)
+_chat_ctx_cache = market_data._BoundedTTLCache(_CHAT_CTX_CACHE_MAX)
 
 
 def _ai_error_to_http(exc: Exception):
@@ -95,7 +104,10 @@ async def daily_brief(
     now = time.time()
     cached_brief = _brief_cache.get(current_user.id)
     if cached_brief is not None and (now - cached_brief[1]) < _BRIEF_CACHE_TTL:
-        return {"brief": cached_brief[0], "generated_at": datetime.now(timezone.utc).isoformat()}
+        return {
+            "brief": cached_brief[0],
+            "generated_at": datetime.fromtimestamp(cached_brief[1], timezone.utc).isoformat(),
+        }
 
     holdings = await _user_holdings(current_user, db)
 
@@ -171,8 +183,9 @@ Do not use markdown, headers, or bullet points — write flowing prose. Do not p
     except Exception as exc:
         _ai_error_to_http(exc)
 
-    _brief_cache[current_user.id] = (brief, time.time())
-    return {"brief": brief, "generated_at": datetime.now(timezone.utc).isoformat()}
+    gen_ts = time.time()
+    _brief_cache.set(current_user.id, brief, gen_ts)
+    return {"brief": brief, "generated_at": datetime.fromtimestamp(gen_ts, timezone.utc).isoformat()}
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -415,8 +428,8 @@ async def chat(
 ):
     now = time.time()
     ctx = _chat_ctx_cache.get(current_user.id)
-    if ctx is not None and (now - ctx[2]) < _CHAT_CTX_TTL:
-        holdings_lines, watchlist_line = ctx[0], ctx[1]
+    if ctx is not None and (now - ctx[1]) < _CHAT_CTX_TTL:
+        holdings_lines, watchlist_line = ctx[0]
     else:
         holdings = await _user_holdings(current_user, db)
         holdings_lines = "\n".join(
@@ -428,7 +441,7 @@ async def chat(
             db.query(models.Watchlist).filter(models.Watchlist.user_id == current_user.id).all()
         )
         watchlist_line = ", ".join(w.ticker for w in watchlist) or "(empty)"
-        _chat_ctx_cache[current_user.id] = (holdings_lines, watchlist_line, time.time())
+        _chat_ctx_cache.set(current_user.id, (holdings_lines, watchlist_line), time.time())
 
     indices = await market_data.get_market_indices()
     index_lines = "\n".join(
