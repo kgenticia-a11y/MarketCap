@@ -167,18 +167,18 @@ Overall return since first buy: {'+' if total_pnl_pct >= 0 else ''}{total_pnl_pc
 Upcoming earnings (next 7 days) for held tickers:
 {chr(10).join(earnings_lines) or '(none)'}
 
-Write a 3-5 sentence daily brief in plain English, in this order:
-1. One sentence market summary.
-2. One sentence on how the user's portfolio is performing relative to the market.
-3. One to two sentences on one specific thing to pay attention to today (an earnings report, catalyst, or volatility). If there are no holdings or earnings, point out a notable market mover instead.
-4. One optional sentence suggesting something concrete (diversification or rebalancing).
-Do not use markdown, headers, or bullet points — write flowing prose. Do not pad with disclaimers."""
+Write exactly 4 complete sentences in plain English:
+1. One sentence summarising today's market moves using the index numbers above.
+2. One sentence on how the user's portfolio is performing relative to those moves, using the portfolio return figure.
+3. One sentence on the single most important thing to watch today — an upcoming earnings report if listed, otherwise the most volatile sector or index.
+4. One concrete, actionable sentence the investor can act on now (rebalancing, trimming a winner, adding to a laggard, etc.).
+Finish every sentence. Do not use markdown, headers, or bullet points. Do not add disclaimers."""
 
     try:
         brief = await claude.ask_claude_text(
             system="You are a sharp, concise financial co-pilot writing a daily portfolio briefing for a retail investor. Be specific and use the real numbers given to you.",
             prompt=prompt,
-            max_tokens=400,
+            max_tokens=600,
         )
     except Exception as exc:
         _ai_error_to_http(exc)
