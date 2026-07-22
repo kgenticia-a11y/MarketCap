@@ -124,6 +124,21 @@ _chart_cache:   _BoundedTTLCache = _BoundedTTLCache(_CHART_CACHE_MAX)
 _update_cache:  tuple[dict, float] | None = None
 _update_lock = asyncio.Lock()
 
+# Portfolio item cache — keyed by ticker. Stores the market-data portion of
+# each portfolio row (price, name, sector, dividend, beta) so that concurrent
+# or repeated calls to get_portfolio_analytics() (e.g. /analytics + /health-score
+# firing simultaneously on page load) pay the yfinance cost at most once per TTL.
+# Position math (cost, value, P&L) is recalculated from the cached price each
+# time, so an edit to shares/avg_buy_price is reflected immediately.
+_PORTFOLIO_ITEM_TTL = 60   # seconds — short enough that price drift is imperceptible
+_portfolio_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+
+# Indices cache — SPY / QQQ / DIA. _fetch_indices calls the sync _fetch_quote
+# path that bypasses _quote_cache, so without this every daily-brief and chat
+# request fired 3 fresh Yahoo calls.
+_indices_cache: tuple[list[dict], float] | None = None
+_INDICES_TTL = 60  # seconds
+
 _QUOTE_TTL   =  30   # seconds — price data refreshes frequently
 _DETAILS_TTL = 300   # 5 min  — company fundamentals rarely change intraday
 _CHART_1D_TTL  =  60   # 1 min  — intraday candles need to be fairly fresh
@@ -525,7 +540,13 @@ def _fetch_indices() -> list[dict]:
 
 
 async def get_market_indices() -> list[dict]:
-    return await _run(_fetch_indices)
+    global _indices_cache
+    now = time.time()
+    if _indices_cache is not None and (now - _indices_cache[1]) < _INDICES_TTL:
+        return _indices_cache[0]
+    result = await _run(_fetch_indices)
+    _indices_cache = (result, now)
+    return result
 
 
 # Canonical stock universe — the single source of truth for breadth,
@@ -1587,9 +1608,43 @@ def _fetch_portfolio_item(ticker: str, shares: float, avg_buy_price: float) -> d
         }
 
 
+async def _get_portfolio_item_cached(ticker: str, shares: float, avg_buy_price: float) -> dict:
+    """Cache-aware wrapper for _fetch_portfolio_item.
+
+    Market data (price, name, sector, dividend, beta) is cached for
+    _PORTFOLIO_ITEM_TTL seconds per ticker. Position math (cost, value, P&L)
+    is recalculated from the cached price each time so edits to
+    shares/avg_buy_price are reflected immediately without a cache miss.
+    """
+    t = ticker.upper()
+    now = time.time()
+    entry = _portfolio_cache.get(t)
+    if entry is not None and (now - entry[1]) < _PORTFOLIO_ITEM_TTL:
+        cached = entry[0]
+        price = cached["current_price"]
+        cost = shares * avg_buy_price
+        value = shares * price
+        pnl = value - cost
+        div_rate = cached.get("annual_dividend_per_share", 0)
+        return {
+            **cached,
+            "shares": shares,
+            "avg_buy_price": round(avg_buy_price, 2),
+            "cost": round(cost, 2),
+            "value": round(value, 2),
+            "pnl": round(pnl, 2),
+            "pnl_pct": round(pnl / cost * 100, 2) if cost > 0 else 0,
+            "annual_dividend_income": round(div_rate * shares, 2),
+            "allocation_pct": 0,
+        }
+    result = await _run(_fetch_portfolio_item, ticker, shares, avg_buy_price)
+    _portfolio_cache.set(t, result, time.time())
+    return result
+
+
 async def get_portfolio_analytics(items: list[dict]) -> list[dict]:
     tasks = [
-        _run(_fetch_portfolio_item, item["ticker"], item["shares"], item["avg_buy_price"])
+        _get_portfolio_item_cached(item["ticker"], item["shares"], item["avg_buy_price"])
         for item in items
     ]
     results = await asyncio.gather(*tasks)

@@ -6,6 +6,7 @@ import { getWatchlist, removeFromWatchlist } from "../api/watchlist";
 import { getQuote, getChart } from "../api/stocks";
 import { addToPortfolio } from "../api/portfolio";
 import { useAuth } from "../context/AuthContext";
+import { useBatchedQuotes } from "../hooks/useBatchedQuotes";
 import { Trash2, Star, Plus, X } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
@@ -245,6 +246,10 @@ export default function Watchlist() {
   }
 
   const items: WatchItem[] = data ?? [];
+
+  // One batch request seeds all ["quote", ticker] cache entries so each
+  // WatchRow's individual useQuery reads from cache instead of hitting /quote/:t.
+  useBatchedQuotes(items.map(i => i.ticker), 15 * 60_000);
 
   return (
     <div className="p-6">
