@@ -178,7 +178,7 @@ Finish every sentence. Do not use markdown, headers, or bullet points. Do not ad
         brief = await claude.ask_claude_text(
             system="You are a sharp, concise financial co-pilot writing a daily portfolio briefing for a retail investor. Be specific and use the real numbers given to you.",
             prompt=prompt,
-            max_tokens=600,
+            max_tokens=1200,
         )
     except Exception as exc:
         _ai_error_to_http(exc)

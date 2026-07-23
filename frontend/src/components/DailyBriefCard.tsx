@@ -6,7 +6,7 @@ export default function DailyBriefCard() {
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ["daily-brief"],
     queryFn: getDailyBrief,
-    staleTime: Infinity,
+    staleTime: 15 * 60 * 1000,  // match server-side 15-min cache TTL
     retry: 1,
   });
 
