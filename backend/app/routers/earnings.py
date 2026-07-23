@@ -383,8 +383,8 @@ async def generate_earnings_recap(
         sp = db.begin_nested()
         db.add(row)
         sp.commit()
-        db.commit()
     except IntegrityError:
+        sp.rollback()
         db.rollback()
         existing = (
             db.query(models.AIEarningsRecap)
@@ -402,6 +402,15 @@ async def generate_earnings_recap(
                 "from_cache": True,
             }
         raise HTTPException(500, "Failed to save recap")
+
+    notif = models.Notification(
+        user_id=current_user.id,
+        type="earnings_recap",
+        message=f"Earnings recap generated for {t}",
+        link=f"/ticker/{t}",
+    )
+    db.add(notif)
+    db.commit()
 
     return {
         "id": row.id,
@@ -482,6 +491,14 @@ async def earnings_batch_trigger(
             results.append({"ticker": ticker, "status": "error", "reason": str(exc)})
             continue
 
+        # Insert notification for the memo's owner
+        notif = models.Notification(
+            user_id=item.get("user_id"),
+            type="earnings_recap",
+            message=f"Earnings recap generated for {ticker}",
+            link=f"/ticker/{ticker}",
+        )
+        db.add(notif)
         results.append({"ticker": ticker, "status": "generated", "recap_id": row.id})
 
     try:

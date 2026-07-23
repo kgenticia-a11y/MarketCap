@@ -303,8 +303,8 @@ async def generate_news_impact(
         sp = db.begin_nested()
         db.add(row)
         sp.commit()
-        db.commit()
     except IntegrityError:
+        sp.rollback()
         db.rollback()
         existing = (
             db.query(models.MemoNewsImpact)
@@ -314,6 +314,16 @@ async def generate_news_impact(
         if existing:
             return _impact_row_to_dict(existing, from_cache=True)
         raise HTTPException(500, "Failed to save impact assessment")
+
+    t = body.ticker.upper()
+    notif = models.Notification(
+        user_id=current_user.id,
+        type="news_impact",
+        message=f"News impact assessed for {t}: {impact}",
+        link=f"/ticker/{t}",
+    )
+    db.add(notif)
+    db.commit()
 
     return _impact_row_to_dict(row, from_cache=False)
 

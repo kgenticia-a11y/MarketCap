@@ -309,6 +309,25 @@ class ThesisCheckpoint(Base):
     memo = relationship("InvestmentMemo", back_populates="checkpoints")
 
 
+class Notification(Base):
+    """In-app notification for a user.
+
+    Rows are written by the backend (recap generation, news impact) and by the
+    weekly digest edge function. read_at=NULL means unread.
+    """
+    __tablename__ = "notifications"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    type       = Column(String, nullable=False)   # earnings_recap | news_impact | digest
+    message    = Column(String, nullable=False)
+    link       = Column(String, nullable=True)
+    read_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User")
+
+
 class MemoNewsImpact(Base):
     """AI-generated impact assessment of a news headline against an investment memo.
 
