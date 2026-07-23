@@ -306,8 +306,14 @@ class WatchlistItemOut(BaseModel):
     id: int
     ticker: str
     added_at: datetime
+    notes: Optional[str] = None
+    notes_updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class WatchlistNotesUpdate(BaseModel):
+    notes: Optional[str] = Field(None, max_length=10_000)
 
 
 # --- Saved Screens ---

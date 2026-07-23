@@ -7,11 +7,11 @@ import { getQuote, getChart } from "../api/stocks";
 import { addToPortfolio } from "../api/portfolio";
 import { useAuth } from "../context/AuthContext";
 import { useBatchedQuotes } from "../hooks/useBatchedQuotes";
-import { Trash2, Star, Plus, X } from "lucide-react";
+import { Trash2, Star, Plus, X, StickyNote } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
 
-interface WatchItem { id: number; ticker: string }
+interface WatchItem { id: number; ticker: string; notes?: string | null }
 
 /* ── Tiny 5-day sparkline ─────────────────────────────────────────────── */
 function Sparkline({ ticker }: { ticker: string }) {
@@ -168,7 +168,7 @@ function WatchRow({ item, onAddToPortfolio }: WatchRowProps) {
     <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-surface-hover transition-colors">
       {/* Ticker */}
       <Link
-        to={`/stock/${item.ticker}`}
+        to={`/ticker/${item.ticker}`}
         className="text-sm font-semibold text-white hover:text-accent-light transition-colors w-14 shrink-0"
       >
         {item.ticker}
@@ -195,6 +195,15 @@ function WatchRow({ item, onAddToPortfolio }: WatchRowProps) {
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {item.notes && (
+          <Link
+            to={`/ticker/${item.ticker}`}
+            title="Has research notes"
+            className="p-1.5 rounded-lg text-accent/70 hover:text-accent transition-colors"
+          >
+            <StickyNote size={13} />
+          </Link>
+        )}
         <button
           title="Add to portfolio"
           onClick={() => onAddToPortfolio(item.ticker, price)}

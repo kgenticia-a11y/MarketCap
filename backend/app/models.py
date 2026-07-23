@@ -91,6 +91,8 @@ class Watchlist(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     ticker = Column(String, nullable=False)
     added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    notes = Column(String, nullable=True)
+    notes_updated_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", back_populates="watchlist")
     __table_args__ = (UniqueConstraint("user_id", "ticker"),)
@@ -284,6 +286,24 @@ class ThesisCheckpoint(Base):
     notes                 = Column(String, nullable=True)
 
     memo = relationship("InvestmentMemo", back_populates="checkpoints")
+
+
+class TickerNewsSummary(Base):
+    """Per-URL AI news summary cache — shared across all users.
+
+    A given headline is summarised once and served to every user who views that
+    ticker hub. url is the deduplication key (UNIQUE in the DB).
+    """
+    __tablename__ = "ticker_news_summaries"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    ticker       = Column(String, nullable=False, index=True)
+    url          = Column(String, nullable=False, unique=True)
+    headline     = Column(String, nullable=False)
+    source       = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    ai_summary   = Column(String, nullable=True)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Feedback(Base):
