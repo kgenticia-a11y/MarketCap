@@ -13,7 +13,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import Base, SessionLocal, engine, run_lightweight_migrations
 from app.middleware import AuthRateLimiter, BodySizeLimiter, RequestIDMiddleware, SecurityHeadersMiddleware
-from app.routers import auth, stocks, portfolio, watchlist, history, feedback, admin, screener, paper_trading, ai, analysis, memos, ticker_hub, earnings
+from app.routers import auth, stocks, portfolio, watchlist, history, feedback, admin, screener, paper_trading, ai, analysis, memos, ticker_hub, earnings, news
 from app.services import market_data
 from app.services.auto_fixer import run_auto_fixer
 from app.services.snapshot_scheduler import snapshot_scheduler_loop
@@ -313,6 +313,7 @@ app.include_router(analysis.router)
 app.include_router(memos.router)
 app.include_router(ticker_hub.router)
 app.include_router(earnings.router)
+app.include_router(news.router)
 
 
 @app.get("/health/live")

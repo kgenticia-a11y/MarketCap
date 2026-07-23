@@ -309,6 +309,29 @@ class ThesisCheckpoint(Base):
     memo = relationship("InvestmentMemo", back_populates="checkpoints")
 
 
+class MemoNewsImpact(Base):
+    """AI-generated impact assessment of a news headline against an investment memo.
+
+    Generated on demand when the user views their news feed. One row per
+    (memo_id, url) pair — the same URL may appear for multiple memos if the
+    user has memos for multiple tickers in the same article.
+    """
+    __tablename__ = "memo_news_impacts"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    memo_id      = Column(Integer, ForeignKey("investment_memos.id", ondelete="CASCADE"), nullable=False, index=True)
+    url          = Column(String, nullable=False)
+    ticker       = Column(String, nullable=False, index=True)
+    headline     = Column(String, nullable=False)
+    impact       = Column(String, nullable=False)    # strengthens | weakens | neutral
+    impact_reason = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    memo = relationship("InvestmentMemo")
+    __table_args__ = (UniqueConstraint("memo_id", "url", name="uq_memo_news_impact"),)
+
+
 class TickerNewsSummary(Base):
     """Per-URL AI news summary cache — shared across all users.
 

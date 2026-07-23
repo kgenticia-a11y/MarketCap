@@ -26,6 +26,7 @@ import MemoView from "./pages/MemoView";
 import MemoPerformance from "./pages/MemoPerformance";
 import TickerHub from "./pages/TickerHub";
 import Earnings from "./pages/Earnings";
+import News from "./pages/News";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
 function Private({ title, fullHeight, children }: {
@@ -68,6 +69,7 @@ function AppRoutes() {
       <Route path="/memos/:id"         element={<Private title="Investment Memo"><MemoView /></Private>} />
       <Route path="/ticker/:symbol"    element={<Private title="Ticker Hub"><TickerHub /></Private>} />
       <Route path="/earnings"          element={<Private title="Earnings Calendar"><Earnings /></Private>} />
+      <Route path="/news"              element={<Private title="News Feed"><News /></Private>} />
 
       {/* ── Public: redirect to dashboard if already signed in ───────── */}
       <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />
