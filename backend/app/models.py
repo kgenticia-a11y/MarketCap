@@ -161,6 +161,27 @@ class PaperTrade(Base):
     portfolio = relationship("PaperPortfolio", back_populates="trades")
 
 
+class AIEarningsRecap(Base):
+    """Claude-generated post-earnings analysis linked to a published memo.
+
+    Generated once per (memo_id, earnings_date) pair by the daily edge
+    function trigger; never overwritten — it is a point-in-time record.
+    memo_id is nullable so a generic (non-memo-linked) recap can be stored
+    if needed in the future.
+    """
+    __tablename__ = "ai_earnings_recaps"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    ticker        = Column(String, nullable=False, index=True)
+    memo_id       = Column(Integer, ForeignKey("investment_memos.id", ondelete="SET NULL"), nullable=True, index=True)
+    earnings_date = Column(String, nullable=False)   # YYYY-MM-DD
+    recap_json    = Column(String, nullable=False)   # JSON-encoded recap
+    created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    memo = relationship("InvestmentMemo")
+    __table_args__ = (UniqueConstraint("memo_id", "earnings_date", name="uq_earnings_recap_memo_date"),)
+
+
 class AIEarningsBrief(Base):
     """Cached Claude-generated pre-earnings brief for a ticker + report date.
 

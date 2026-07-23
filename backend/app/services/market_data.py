@@ -2353,3 +2353,111 @@ async def get_ownership(ticker: str) -> dict:
     if entry is not None and (now - entry[1]) < _OWNERSHIP_TTL:
         return entry[0]
     return await _singleflight(_inflight_ownership, t, lambda: _fetch_ownership_async(t))
+
+# ── Ticker Hub: Earnings Date ──────────────────────────────────────────────
+# Uses yfinance .calendar to get the next upcoming earnings date and consensus
+# EPS / revenue estimates. Cached 1 hour — dates rarely change within a day.
+
+_EARNINGS_DATE_TTL   = 3600
+_earnings_date_cache: _BoundedTTLCache = _BoundedTTLCache(2000)
+_inflight_earnings_date: dict[str, asyncio.Future] = {}
+
+
+def _fetch_earnings_date(ticker: str) -> dict:
+    """Return next earnings date + consensus estimates from yfinance calendar."""
+    out: dict = {
+        "ticker": ticker,
+        "earnings_date": None,
+        "earnings_date_end": None,
+        "eps_estimate": None,
+        "revenue_estimate_b": None,
+    }
+    try:
+        t = yf.Ticker(ticker)
+        cal = t.calendar  # dict with Earnings Date (list[date]), Earnings Average, Revenue Average
+        if not cal or not isinstance(cal, dict):
+            return out
+
+        today = date.today()
+        dates = cal.get("Earnings Date") or []
+        # dates are datetime.date objects (from yfinance scraper)
+        future_dates = [
+            d for d in dates
+            if hasattr(d, "year") and d >= today
+        ]
+        if future_dates:
+            out["earnings_date"] = str(future_dates[0])
+            if len(future_dates) >= 2:
+                out["earnings_date_end"] = str(future_dates[-1])
+
+        eps = cal.get("Earnings Average")
+        if isinstance(eps, float) and eps == eps:  # exclude NaN
+            out["eps_estimate"] = round(eps, 4)
+
+        rev = cal.get("Revenue Average")
+        if isinstance(rev, (int, float)) and rev == rev:
+            out["revenue_estimate_b"] = round(rev / 1e9, 2)
+    except Exception:
+        logger.debug("earnings_date failed for %s", ticker)
+    return out
+
+
+async def _fetch_earnings_date_async(t: str) -> dict:
+    result = await _run(_fetch_earnings_date, t)
+    _earnings_date_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ticker_earnings_date(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _earnings_date_cache.get(t)
+    if entry is not None and (now - entry[1]) < _EARNINGS_DATE_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_earnings_date, t, lambda: _fetch_earnings_date_async(t))
+
+
+# ── Earnings: recent EPS history (for recap context) ──────────────────────
+
+_EARNINGS_HIST_TTL   = 3600
+_earnings_hist_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+_inflight_earnings_hist: dict[str, asyncio.Future] = {}
+
+
+def _fetch_earnings_history(ticker: str) -> list[dict]:
+    """Most recent 4 quarterly EPS actual / estimate from yfinance earnings_history."""
+    rows: list[dict] = []
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.earnings_history  # DataFrame indexed by quarter date
+        if hist is None or hist.empty:
+            return rows
+        for idx, row in hist.head(4).iterrows():
+            quarter = str(idx)[:10] if idx is not None else None
+            eps_a = row.get("epsActual")
+            eps_e = row.get("epsEstimate")
+            surprise = row.get("surprisePercent")
+            rows.append({
+                "quarter": quarter,
+                "eps_actual": float(eps_a) if eps_a is not None and eps_a == eps_a else None,
+                "eps_estimate": float(eps_e) if eps_e is not None and eps_e == eps_e else None,
+                "surprise_pct": float(surprise) if surprise is not None and surprise == surprise else None,
+            })
+    except Exception:
+        logger.debug("earnings_history failed for %s", ticker)
+    return rows
+
+
+async def _fetch_earnings_hist_async(t: str) -> list[dict]:
+    result = await _run(_fetch_earnings_history, t)
+    _earnings_hist_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ticker_earnings_history(ticker: str) -> list[dict]:
+    t = ticker.upper()
+    now = time.time()
+    entry = _earnings_hist_cache.get(t)
+    if entry is not None and (now - entry[1]) < _EARNINGS_HIST_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_earnings_hist, t, lambda: _fetch_earnings_hist_async(t))

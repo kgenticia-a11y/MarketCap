@@ -7,7 +7,7 @@ import {
 import { clsx } from "clsx";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BookOpen, Eye, FileText, Plus, Star, StarOff,
+  ArrowLeft, BookOpen, Calendar, Eye, FileText, Plus, Sparkles, Star, StarOff,
   TrendingDown, TrendingUp, ExternalLink, StickyNote,
 } from "lucide-react";
 
@@ -18,6 +18,7 @@ import {
   addToWatchlist, removeFromWatchlist, updateWatchlistNotes,
 } from "../api/watchlist";
 import { createMemo } from "../api/memos";
+import { getEarningsRecap, generateEarningsRecap } from "../api/earnings";
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -39,6 +40,13 @@ function fmtDate(ts: number | null) {
   return new Date(ts * 1000).toLocaleDateString(undefined, {
     month: "short", day: "numeric",
   });
+}
+
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
 function useDebounce<T>(value: T, ms: number): T {
@@ -262,6 +270,33 @@ export default function TickerHub() {
     onError: () => toast.error("Failed to create memo"),
   });
 
+  /* Earnings recap (only if there's a published memo for this ticker) */
+  const publishedMemo = hub?.memos.find((m) => m.status === "published") ?? null;
+  const { data: recap, isLoading: recapLoading } = useQuery({
+    queryKey: ["earnings-recap", ticker, publishedMemo?.id],
+    queryFn: () => getEarningsRecap(ticker, { memo_id: publishedMemo!.id }),
+    enabled: !!publishedMemo,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+  const recapMutation = useMutation({
+    mutationFn: () => {
+      const ne = hub?.next_earnings;
+      const memoId = publishedMemo?.id;
+      if (!ne || !memoId) throw new Error("Missing data");
+      return generateEarningsRecap(ticker, memoId, ne.earnings_date);
+    },
+    onSuccess: () => {
+      toast.success("Earnings recap generated");
+      qc.invalidateQueries({ queryKey: ["earnings-recap", ticker] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to generate recap";
+      toast.error(msg);
+    },
+  });
+
   /* Quarterly data convenience alias */
   const q = hub?.quarterly ?? { dates: [], revenue: [], gross_margin: [], operating_margin: [], net_margin: [] };
 
@@ -370,6 +405,76 @@ export default function TickerHub() {
           </div>
         </div>
       )}
+
+      {/* ── Earnings Countdown ─────────────────────────────────────────── */}
+      {!isLoading && hub?.next_earnings && (() => {
+        const ne = hub.next_earnings;
+        const days = daysUntil(ne.earnings_date);
+        if (days < 0 || days > 30) return null;
+        const IMPACT_COLOR = {
+          strengthens: "text-positive",
+          weakens: "text-negative",
+          neutral: "text-muted",
+        } as const;
+        return (
+          <section className="bg-surface rounded-xl border border-accent/20 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <Calendar size={15} className="text-accent shrink-0" />
+                <div>
+                  <span className="text-sm font-semibold text-white">
+                    Next earnings:&nbsp;
+                    {new Date(ne.earnings_date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                  <span className="ml-2 text-xs text-accent font-medium">
+                    {days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days} days`}
+                  </span>
+                </div>
+              </div>
+              {ne.eps_estimate != null && (
+                <div className="text-xs text-muted">
+                  EPS est. <span className="text-white font-medium">${ne.eps_estimate.toFixed(2)}</span>
+                  {ne.revenue_estimate_b != null && (
+                    <span className="ml-2">Rev est. <span className="text-white font-medium">${ne.revenue_estimate_b.toFixed(1)}B</span></span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Recap section */}
+            {publishedMemo && (
+              <div className="border-t border-border/50 pt-3">
+                {recapLoading ? (
+                  <SkeletonBox className="h-10" />
+                ) : recap ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={12} className="text-accent shrink-0" />
+                      <span className="text-[11px] font-semibold text-muted uppercase tracking-wide">AI Thesis Assessment</span>
+                      <span className={clsx(
+                        "ml-auto text-[11px] font-medium capitalize",
+                        IMPACT_COLOR[recap.recap.key_impact] ?? "text-muted",
+                      )}>
+                        {recap.recap.key_impact}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted/90 leading-relaxed">{recap.recap.thesis_assessment}</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => recapMutation.mutate()}
+                    disabled={recapMutation.isPending}
+                    className="flex items-center gap-1.5 text-xs text-accent hover:text-accent/80 transition-colors disabled:opacity-50"
+                  >
+                    <Sparkles size={12} />
+                    {recapMutation.isPending ? "Generating recap…" : "Generate AI thesis recap"}
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* ── Key Metrics Grid ───────────────────────────────────────────── */}
       <section>

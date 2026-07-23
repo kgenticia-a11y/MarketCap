@@ -39,15 +39,17 @@ async def get_ticker_hub(
     details_task = asyncio.create_task(market_data.get_ticker_details(ticker))
     fundamentals_task = asyncio.create_task(market_data.get_fundamentals(ticker))
     quarterly_task = asyncio.create_task(market_data.get_quarterly_metrics(ticker))
+    earnings_task = asyncio.create_task(market_data.get_ticker_earnings_date(ticker))
 
     results = await asyncio.gather(
-        quote_task, details_task, fundamentals_task, quarterly_task,
+        quote_task, details_task, fundamentals_task, quarterly_task, earnings_task,
         return_exceptions=True,
     )
-    quote       = results[0] if not isinstance(results[0], Exception) else {}
-    details     = results[1] if not isinstance(results[1], Exception) else {}
+    quote        = results[0] if not isinstance(results[0], Exception) else {}
+    details      = results[1] if not isinstance(results[1], Exception) else {}
     fundamentals = results[2] if not isinstance(results[2], Exception) else {}
-    quarterly   = results[3] if not isinstance(results[3], Exception) else {}
+    quarterly    = results[3] if not isinstance(results[3], Exception) else {}
+    earnings_cal = results[4] if not isinstance(results[4], Exception) else {}
 
     # User research: memos for this ticker
     memos = (
@@ -135,6 +137,8 @@ async def get_ticker_hub(
         "week_52_low": details.get("week_52_low"),
         # Quarterly sparklines
         "quarterly": quarterly if isinstance(quarterly, dict) else {},
+        # Next earnings date (within 30-day window shown in UI)
+        "next_earnings": earnings_cal if isinstance(earnings_cal, dict) and earnings_cal.get("earnings_date") else None,
         # User research
         "memos": memo_list,
         "watchlist_item": watchlist_dict,

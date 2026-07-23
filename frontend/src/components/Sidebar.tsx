@@ -5,6 +5,7 @@ import {
   TrendingUp,
   CandlestickChart,
   Briefcase,
+  Calendar,
   Settings,
   History,
   MessageSquare,
@@ -33,6 +34,7 @@ const menu = [
   { label: "Market Update",  icon: TrendingUp,      to: "/market" },
   { label: "Stock Screener", icon: ScanSearch,      to: "/screener" },
   { label: "Portfolio",      icon: Briefcase,       to: "/portfolio" },
+  { label: "Earnings",       icon: Calendar,        to: "/earnings" },
 ];
 
 // Tools: separate, deeper workflows. Grouping them under their own header

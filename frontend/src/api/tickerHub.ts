@@ -35,6 +35,14 @@ export interface HubPortfolioPosition {
   added_at: string | null;
 }
 
+export interface NextEarnings {
+  ticker: string;
+  earnings_date: string;
+  earnings_date_end: string | null;
+  eps_estimate: number | null;
+  revenue_estimate_b: number | null;
+}
+
 export interface TickerHub {
   ticker: string;
   name: string | null;
@@ -52,6 +60,7 @@ export interface TickerHub {
   week_52_high: number | null;
   week_52_low: number | null;
   quarterly: QuarterlyMetrics;
+  next_earnings: NextEarnings | null;
   memos: HubMemo[];
   watchlist_item: HubWatchlistItem | null;
   portfolio_positions: HubPortfolioPosition[];
