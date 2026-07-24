@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from app import models, schemas, auth
@@ -47,3 +49,21 @@ def remove_from_watchlist(
         raise HTTPException(404, "Ticker not in watchlist")
     db.delete(item)
     db.commit()
+
+
+@router.patch("/{ticker}/notes", response_model=schemas.WatchlistItemOut)
+def update_watchlist_notes(
+    body: schemas.WatchlistNotesUpdate,
+    ticker: str = _TICKER_PATH,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Autosave research notes for a watchlist entry."""
+    item = db.query(models.Watchlist).filter_by(user_id=current_user.id, ticker=ticker.upper()).first()
+    if not item:
+        raise HTTPException(404, "Ticker not in watchlist")
+    item.notes = body.notes
+    item.notes_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(item)
+    return item

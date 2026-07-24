@@ -2125,3 +2125,339 @@ async def stream_screener():
         # work on the pool still completes and isn't double-submitted next call.
         if not backfill_task.done():
             backfill_task.cancel()
+
+
+# ── Ticker Hub: News ──────────────────────────────────────────────────────
+# yfinance's t.news supports two wire formats — old (flat dict) and new
+# (content-wrapped). Both are normalised to the same output shape.
+
+_NEWS_TTL     = 15 * 60   # 15 minutes
+_news_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+_inflight_news: dict[str, asyncio.Future] = {}
+
+
+def _parse_news_item(item: dict) -> dict | None:
+    """Normalise a yfinance news dict to {title, url, publisher, published_ts}."""
+    # New format (yfinance >= 0.2.44): nested under 'content'
+    content = item.get("content", {})
+    if content:
+        title = content.get("title", "") or ""
+        url = (content.get("canonicalUrl") or {}).get("url", "") or ""
+        if not url:
+            url = (content.get("clickThroughUrl") or {}).get("url", "") or ""
+        publisher = (content.get("provider") or {}).get("displayName", "") or ""
+        pub_str = content.get("pubDate", "") or ""
+        try:
+            pub_ts = int(datetime.fromisoformat(pub_str.replace("Z", "+00:00")).timestamp()) if pub_str else 0
+        except Exception:
+            pub_ts = 0
+    else:
+        # Old format: flat fields
+        title = item.get("title", "") or ""
+        url   = item.get("link", "") or ""
+        publisher = item.get("publisher", "") or ""
+        pub_ts = int(item.get("providerPublishTime") or 0)
+
+    if not title or not url:
+        return None
+    return {"title": title, "url": url, "publisher": publisher, "published_ts": pub_ts}
+
+
+def _fetch_news(ticker: str) -> list[dict]:
+    t = yf.Ticker(ticker)
+    try:
+        raw = t.news or []
+    except Exception:
+        return []
+    items = []
+    for item in raw[:10]:
+        parsed = _parse_news_item(item)
+        if parsed:
+            items.append(parsed)
+        if len(items) >= 5:
+            break
+    return items
+
+
+async def _fetch_news_async(t: str) -> list[dict]:
+    result = await _run(_fetch_news, t)
+    _news_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ticker_news(ticker: str) -> list[dict]:
+    t = ticker.upper()
+    now = time.time()
+    entry = _news_cache.get(t)
+    if entry is not None and (now - entry[1]) < _NEWS_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_news, t, lambda: _fetch_news_async(t))
+
+
+# ── Ticker Hub: Quarterly Metrics (sparklines) ────────────────────────────
+
+_QUARTERLY_TTL     = 3600   # 1 hour — quarterly data changes on report day only
+_quarterly_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+_inflight_quarterly: dict[str, asyncio.Future] = {}
+
+
+def _fetch_quarterly_metrics(ticker: str) -> dict:
+    t = yf.Ticker(ticker)
+    out: dict = {
+        "revenue": [],
+        "gross_margin": [],
+        "operating_margin": [],
+        "net_margin": [],
+        "dates": [],
+    }
+    try:
+        stmt = t.quarterly_income_stmt
+        if stmt is None or stmt.empty:
+            return out
+
+        # Columns are dates (most recent first); rows are metric names.
+        # Take up to 8 quarters (most recent), then reverse for chronological order.
+        cols = list(stmt.columns[:8])
+        cols.reverse()
+
+        revenue_row = None
+        gross_row = None
+        op_row = None
+        net_row = None
+
+        for name in stmt.index:
+            lower = name.lower()
+            if "total revenue" in lower and revenue_row is None:
+                revenue_row = stmt.loc[name]
+            elif "gross profit" in lower and gross_row is None:
+                gross_row = stmt.loc[name]
+            elif "operating income" in lower and op_row is None:
+                op_row = stmt.loc[name]
+            elif "net income" in lower and net_row is None:
+                net_row = stmt.loc[name]
+
+        for col in cols:
+            date_str = col.strftime("%Y-Q%q") if hasattr(col, "strftime") else str(col)[:7]
+            out["dates"].append(date_str)
+
+            rev = float(revenue_row[col]) if revenue_row is not None and col in revenue_row.index and revenue_row[col] == revenue_row[col] else None
+            gross = float(gross_row[col]) if gross_row is not None and col in gross_row.index and gross_row[col] == gross_row[col] else None
+            op = float(op_row[col]) if op_row is not None and col in op_row.index and op_row[col] == op_row[col] else None
+            net = float(net_row[col]) if net_row is not None and col in net_row.index and net_row[col] == net_row[col] else None
+
+            out["revenue"].append(round(rev / 1e9, 2) if rev else None)
+            out["gross_margin"].append(round(gross / rev * 100, 1) if gross and rev else None)
+            out["operating_margin"].append(round(op / rev * 100, 1) if op and rev else None)
+            out["net_margin"].append(round(net / rev * 100, 1) if net and rev else None)
+    except Exception:
+        logger.debug("quarterly_metrics failed for %s", ticker)
+
+    return out
+
+
+async def _fetch_quarterly_async(t: str) -> dict:
+    result = await _run(_fetch_quarterly_metrics, t)
+    _quarterly_cache.set(t, result, time.time())
+    return result
+
+
+async def get_quarterly_metrics(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _quarterly_cache.get(t)
+    if entry is not None and (now - entry[1]) < _QUARTERLY_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_quarterly, t, lambda: _fetch_quarterly_async(t))
+
+
+# ── Ticker Hub: Ownership ─────────────────────────────────────────────────
+
+_OWNERSHIP_TTL     = 3600   # 1 hour
+_ownership_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+_inflight_ownership: dict[str, asyncio.Future] = {}
+
+
+def _fetch_ownership(ticker: str) -> dict:
+    t = yf.Ticker(ticker)
+    out: dict = {"institutional_holders": [], "insider_transactions": [], "available": False}
+    try:
+        inst = t.institutional_holders
+        if inst is not None and not inst.empty:
+            rows = []
+            for _, row in inst.head(10).iterrows():
+                holder = str(row.get("Holder") or row.get("Name") or "")
+                shares = row.get("Shares")
+                pct = row.get("% Out") or row.get("pctHeld")
+                value = row.get("Value") or row.get("value")
+                date_rep = row.get("Date Reported") or row.get("dateReported")
+                rows.append({
+                    "holder": holder,
+                    "shares": int(shares) if shares == shares and shares else None,
+                    "pct_out": round(float(pct) * 100, 2) if pct == pct and pct else None,
+                    "value": int(value) if value == value and value else None,
+                    "date_reported": str(date_rep)[:10] if date_rep is not None else None,
+                })
+            out["institutional_holders"] = rows
+            if rows:
+                out["available"] = True
+    except Exception:
+        logger.debug("institutional_holders failed for %s", ticker)
+
+    try:
+        insider = t.insider_transactions
+        if insider is not None and not insider.empty:
+            rows = []
+            # Filter last 6 months
+            cutoff = time.time() - 180 * 86400
+            for _, row in insider.iterrows():
+                tx_date = row.get("Transaction Date") or row.get("startDate")
+                try:
+                    if tx_date is not None:
+                        ts = int(tx_date.timestamp()) if hasattr(tx_date, "timestamp") else 0
+                        if ts > 0 and ts < cutoff:
+                            continue
+                except Exception:
+                    pass
+                name = str(row.get("Insider") or row.get("filerName") or row.get("reportingName") or "")
+                title = str(row.get("Connection") or row.get("relationship") or "")
+                tx_type = str(row.get("Insider Trading") or row.get("transactionText") or "")
+                shares = row.get("Shares") or row.get("shares")
+                rows.append({
+                    "name": name,
+                    "title": title,
+                    "transaction": tx_type,
+                    "shares": int(shares) if shares == shares and shares else None,
+                    "date": str(tx_date)[:10] if tx_date is not None else None,
+                })
+                if len(rows) >= 10:
+                    break
+            out["insider_transactions"] = rows
+            if rows:
+                out["available"] = True
+    except Exception:
+        logger.debug("insider_transactions failed for %s", ticker)
+
+    return out
+
+
+async def _fetch_ownership_async(t: str) -> dict:
+    result = await _run(_fetch_ownership, t)
+    _ownership_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ownership(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _ownership_cache.get(t)
+    if entry is not None and (now - entry[1]) < _OWNERSHIP_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_ownership, t, lambda: _fetch_ownership_async(t))
+
+# ── Ticker Hub: Earnings Date ──────────────────────────────────────────────
+# Uses yfinance .calendar to get the next upcoming earnings date and consensus
+# EPS / revenue estimates. Cached 1 hour — dates rarely change within a day.
+
+_EARNINGS_DATE_TTL   = 3600
+_earnings_date_cache: _BoundedTTLCache = _BoundedTTLCache(2000)
+_inflight_earnings_date: dict[str, asyncio.Future] = {}
+
+
+def _fetch_earnings_date(ticker: str) -> dict:
+    """Return next earnings date + consensus estimates from yfinance calendar."""
+    out: dict = {
+        "ticker": ticker,
+        "earnings_date": None,
+        "earnings_date_end": None,
+        "eps_estimate": None,
+        "revenue_estimate_b": None,
+    }
+    try:
+        t = yf.Ticker(ticker)
+        cal = t.calendar  # dict with Earnings Date (list[date]), Earnings Average, Revenue Average
+        if not cal or not isinstance(cal, dict):
+            return out
+
+        today = date.today()
+        dates = cal.get("Earnings Date") or []
+        # dates are datetime.date objects (from yfinance scraper)
+        future_dates = [
+            d for d in dates
+            if hasattr(d, "year") and d >= today
+        ]
+        if future_dates:
+            out["earnings_date"] = str(future_dates[0])
+            if len(future_dates) >= 2:
+                out["earnings_date_end"] = str(future_dates[-1])
+
+        eps = cal.get("Earnings Average")
+        if isinstance(eps, float) and eps == eps:  # exclude NaN
+            out["eps_estimate"] = round(eps, 4)
+
+        rev = cal.get("Revenue Average")
+        if isinstance(rev, (int, float)) and rev == rev:
+            out["revenue_estimate_b"] = round(rev / 1e9, 2)
+    except Exception:
+        logger.debug("earnings_date failed for %s", ticker)
+    return out
+
+
+async def _fetch_earnings_date_async(t: str) -> dict:
+    result = await _run(_fetch_earnings_date, t)
+    _earnings_date_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ticker_earnings_date(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _earnings_date_cache.get(t)
+    if entry is not None and (now - entry[1]) < _EARNINGS_DATE_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_earnings_date, t, lambda: _fetch_earnings_date_async(t))
+
+
+# ── Earnings: recent EPS history (for recap context) ──────────────────────
+
+_EARNINGS_HIST_TTL   = 3600
+_earnings_hist_cache: _BoundedTTLCache = _BoundedTTLCache(500)
+_inflight_earnings_hist: dict[str, asyncio.Future] = {}
+
+
+def _fetch_earnings_history(ticker: str) -> list[dict]:
+    """Most recent 4 quarterly EPS actual / estimate from yfinance earnings_history."""
+    rows: list[dict] = []
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.earnings_history  # DataFrame indexed by quarter date
+        if hist is None or hist.empty:
+            return rows
+        for idx, row in hist.head(4).iterrows():
+            quarter = str(idx)[:10] if idx is not None else None
+            eps_a = row.get("epsActual")
+            eps_e = row.get("epsEstimate")
+            surprise = row.get("surprisePercent")
+            rows.append({
+                "quarter": quarter,
+                "eps_actual": float(eps_a) if eps_a is not None and eps_a == eps_a else None,
+                "eps_estimate": float(eps_e) if eps_e is not None and eps_e == eps_e else None,
+                "surprise_pct": float(surprise) if surprise is not None and surprise == surprise else None,
+            })
+    except Exception:
+        logger.debug("earnings_history failed for %s", ticker)
+    return rows
+
+
+async def _fetch_earnings_hist_async(t: str) -> list[dict]:
+    result = await _run(_fetch_earnings_history, t)
+    _earnings_hist_cache.set(t, result, time.time())
+    return result
+
+
+async def get_ticker_earnings_history(ticker: str) -> list[dict]:
+    t = ticker.upper()
+    now = time.time()
+    entry = _earnings_hist_cache.get(t)
+    if entry is not None and (now - entry[1]) < _EARNINGS_HIST_TTL:
+        return entry[0]
+    return await _singleflight(_inflight_earnings_hist, t, lambda: _fetch_earnings_hist_async(t))

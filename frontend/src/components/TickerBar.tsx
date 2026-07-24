@@ -1,10 +1,12 @@
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getMarketOverview, getChart, getQuote } from "../api/stocks";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, Bell } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { searchStocks } from "../api/stocks";
+import { getNotifications, markNotificationRead, markAllNotificationsRead, type Notification } from "../api/notifications";
+import { useAuth } from "../context/AuthContext";
 
 const INDEX_LABELS: Record<string, string> = {
   SPY: "S&P 500",
@@ -65,12 +67,116 @@ function TickerCard({ snap }: { snap: Record<string, unknown> }) {
   );
 }
 
+function NotificationBell() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const { data } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: getNotifications,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  });
+
+  const notifications: Notification[] = data?.notifications ?? [];
+  const unreadCount: number = data?.unread_count ?? 0;
+
+  const markOneMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markAllMutation = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const handleNotifClick = (notif: Notification) => {
+    if (notif.read_at === null) markOneMutation.mutate(notif.id);
+    setOpen(false);
+    if (notif.link) navigate(notif.link);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="relative p-2 rounded-lg text-muted hover:text-white hover:bg-surface-hover transition-colors"
+        title="Notifications"
+      >
+        <Bell size={16} />
+        {unreadCount > 0 && (
+          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-1 right-0 w-80 bg-surface-raised border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="px-4 py-2.5 flex items-center justify-between border-b border-border">
+            <span className="text-xs font-semibold text-white">Notifications</span>
+            {unreadCount > 0 && (
+              <button
+                onMouseDown={() => markAllMutation.mutate()}
+                className="text-[10px] text-muted hover:text-white transition-colors"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-muted">No notifications yet</div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.map((n) => (
+                <button
+                  key={n.id}
+                  onMouseDown={() => handleNotifClick(n)}
+                  className={`w-full text-left px-4 py-3 border-b border-border/50 last:border-0 hover:bg-surface-hover transition-colors ${n.read_at === null ? "bg-accent/5" : ""}`}
+                >
+                  <div className="flex items-start gap-2">
+                    {n.read_at === null && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shrink-0" />
+                    )}
+                    <div className={n.read_at !== null ? "pl-3.5" : ""}>
+                      <p className="text-xs text-white leading-snug">{n.message}</p>
+                      <p className="text-[10px] text-muted mt-0.5">
+                        {n.created_at
+                          ? new Date(n.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TickerBar({ title, onMenuClick }: { title: string; onMenuClick?: () => void }) {
   const [q, setQ]           = useState("");
   const [open, setOpen]     = useState(false);
   const [cursor, setCursor] = useState(-1);
   const inputRef            = useRef<HTMLInputElement>(null);
   const navigate            = useNavigate();
+  const { user }            = useAuth();
 
   const [recents, setRecents] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("mc_recent_searches") ?? "[]"); }
@@ -177,6 +283,9 @@ export default function TickerBar({ title, onMenuClick }: { title: string; onMen
           <TickerCard key={snap.ticker as string} snap={snap} />
         ))}
       </div>
+
+      {/* Notification bell — only when signed in */}
+      {user && <NotificationBell />}
 
       {/* Search — desktop only. On phones the address-bar real estate
           isn't worth a 192px-wide search box that pushes everything

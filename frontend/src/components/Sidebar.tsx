@@ -2,9 +2,12 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   BarChart2,
+  BookOpen,
   TrendingUp,
   CandlestickChart,
   Briefcase,
+  Calendar,
+  Newspaper,
   Settings,
   History,
   MessageSquare,
@@ -33,12 +36,15 @@ const menu = [
   { label: "Market Update",  icon: TrendingUp,      to: "/market" },
   { label: "Stock Screener", icon: ScanSearch,      to: "/screener" },
   { label: "Portfolio",      icon: Briefcase,       to: "/portfolio" },
+  { label: "Earnings",       icon: Calendar,        to: "/earnings" },
+  { label: "News",           icon: Newspaper,       to: "/news" },
 ];
 
 // Tools: separate, deeper workflows. Grouping them under their own header
 // keeps the primary nav scannable and signals "these are auxiliary".
 const tools = [
   { label: "Investment Memos", icon: NotebookPen,      to: "/memos" },
+  { label: "Learn",            icon: BookOpen,         to: "/learn" },
   { label: "Income Estimator", icon: BarChart2,        to: "/income" },
   { label: "Analyst Report",    icon: FileText,          to: "/analyst-report" },
   { label: "Interactive Chart", icon: CandlestickChart, to: "/chart" },

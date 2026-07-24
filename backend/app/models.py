@@ -91,6 +91,8 @@ class Watchlist(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     ticker = Column(String, nullable=False)
     added_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    notes = Column(String, nullable=True)
+    notes_updated_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", back_populates="watchlist")
     __table_args__ = (UniqueConstraint("user_id", "ticker"),)
@@ -157,6 +159,27 @@ class PaperTrade(Base):
     executed_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     portfolio = relationship("PaperPortfolio", back_populates="trades")
+
+
+class AIEarningsRecap(Base):
+    """Claude-generated post-earnings analysis linked to a published memo.
+
+    Generated once per (memo_id, earnings_date) pair by the daily edge
+    function trigger; never overwritten — it is a point-in-time record.
+    memo_id is nullable so a generic (non-memo-linked) recap can be stored
+    if needed in the future.
+    """
+    __tablename__ = "ai_earnings_recaps"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    ticker        = Column(String, nullable=False, index=True)
+    memo_id       = Column(Integer, ForeignKey("investment_memos.id", ondelete="SET NULL"), nullable=True, index=True)
+    earnings_date = Column(String, nullable=False)   # YYYY-MM-DD
+    recap_json    = Column(String, nullable=False)   # JSON-encoded recap
+    created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    memo = relationship("InvestmentMemo")
+    __table_args__ = (UniqueConstraint("memo_id", "earnings_date", name="uq_earnings_recap_memo_date"),)
 
 
 class AIEarningsBrief(Base):
@@ -284,6 +307,66 @@ class ThesisCheckpoint(Base):
     notes                 = Column(String, nullable=True)
 
     memo = relationship("InvestmentMemo", back_populates="checkpoints")
+
+
+class Notification(Base):
+    """In-app notification for a user.
+
+    Rows are written by the backend (recap generation, news impact) and by the
+    weekly digest edge function. read_at=NULL means unread.
+    """
+    __tablename__ = "notifications"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    type       = Column(String, nullable=False)   # earnings_recap | news_impact | digest
+    message    = Column(String, nullable=False)
+    link       = Column(String, nullable=True)
+    read_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User")
+
+
+class MemoNewsImpact(Base):
+    """AI-generated impact assessment of a news headline against an investment memo.
+
+    Generated on demand when the user views their news feed. One row per
+    (memo_id, url) pair — the same URL may appear for multiple memos if the
+    user has memos for multiple tickers in the same article.
+    """
+    __tablename__ = "memo_news_impacts"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    memo_id      = Column(Integer, ForeignKey("investment_memos.id", ondelete="CASCADE"), nullable=False, index=True)
+    url          = Column(String, nullable=False)
+    ticker       = Column(String, nullable=False, index=True)
+    headline     = Column(String, nullable=False)
+    impact       = Column(String, nullable=False)    # strengthens | weakens | neutral
+    impact_reason = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    memo = relationship("InvestmentMemo")
+    __table_args__ = (UniqueConstraint("memo_id", "url", name="uq_memo_news_impact"),)
+
+
+class TickerNewsSummary(Base):
+    """Per-URL AI news summary cache — shared across all users.
+
+    A given headline is summarised once and served to every user who views that
+    ticker hub. url is the deduplication key (UNIQUE in the DB).
+    """
+    __tablename__ = "ticker_news_summaries"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    ticker       = Column(String, nullable=False, index=True)
+    url          = Column(String, nullable=False, unique=True)
+    headline     = Column(String, nullable=False)
+    source       = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    ai_summary   = Column(String, nullable=True)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Feedback(Base):
