@@ -149,7 +149,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
             .eq("portfolio_id", portfolioId)
             .lte("date", today)
             .order("date", { ascending: false })
-            .limit(2);
+            .limit(1);
 
           if (snapshots && snapshots.length > 0) {
             currentValue = (snapshots[0] as PortfolioSnapshot).total_value;

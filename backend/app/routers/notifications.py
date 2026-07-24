@@ -31,7 +31,10 @@ def get_notifications(
         .limit(20)
         .all()
     )
-    unread = sum(1 for r in rows if r.read_at is None)
+    unread = db.query(models.Notification).filter(
+        models.Notification.user_id == current_user.id,
+        models.Notification.read_at.is_(None),
+    ).count()
     return {
         "notifications": [
             {

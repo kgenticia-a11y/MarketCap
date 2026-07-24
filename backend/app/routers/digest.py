@@ -125,7 +125,7 @@ async def get_digest_preview(
     memo_ids = [m.id for m in published_memos]
     recent_impacts: list[dict] = []
     if memo_ids:
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff_dt = (datetime.now(timezone.utc) - timedelta(days=7)).replace(tzinfo=None)
         impacts = (
             db.query(models.MemoNewsImpact)
             .filter(

@@ -444,7 +444,8 @@ async def earnings_batch_trigger(
         ticker = str(item.get("ticker", "")).upper()
         memo_id = item.get("memo_id")
         earnings_date = str(item.get("earnings_date", ""))
-        if not ticker or not memo_id or not earnings_date:
+        user_id = item.get("user_id")
+        if not ticker or not memo_id or not earnings_date or not user_id:
             results.append({"ticker": ticker, "status": "skipped", "reason": "missing fields"})
             continue
 
@@ -491,19 +492,20 @@ async def earnings_batch_trigger(
             results.append({"ticker": ticker, "status": "error", "reason": str(exc)})
             continue
 
-        # Insert notification for the memo's owner
+        # Insert notification and commit this item atomically
         notif = models.Notification(
-            user_id=item.get("user_id"),
+            user_id=user_id,
             type="earnings_recap",
             message=f"Earnings recap generated for {ticker}",
             link=f"/ticker/{ticker}",
         )
         db.add(notif)
-        results.append({"ticker": ticker, "status": "generated", "recap_id": row.id})
-
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
+        try:
+            db.commit()
+            results.append({"ticker": ticker, "status": "generated", "recap_id": row.id})
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Batch commit failed for %s: %s", ticker, exc)
+            results.append({"ticker": ticker, "status": "error", "reason": "commit failed"})
 
     return {"results": results, "total": len(results)}

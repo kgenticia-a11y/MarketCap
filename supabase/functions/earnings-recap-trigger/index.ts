@@ -37,7 +37,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
     // batch handler doesn't need to re-query Supabase for each ticker.
     const { data: memos, error: memosErr } = await supabase
       .from("investment_memos")
-      .select("id, ticker, thesis_summary, moat_notes, financial_health_notes, risks")
+      .select("id, user_id, ticker, thesis_summary, moat_notes, financial_health_notes, risks")
       .eq("status", "published");
 
     if (memosErr) {
@@ -72,6 +72,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
       .filter((m: { id: number }) => !alreadyDone.has(m.id))
       .map((m: {
         id: number;
+        user_id: number;
         ticker: string;
         thesis_summary: string | null;
         moat_notes: string | null;
@@ -80,6 +81,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
       }) => ({
         ticker: m.ticker,
         memo_id: m.id,
+        user_id: m.user_id,
         earnings_date: yesterdayStr,
         thesis_summary: m.thesis_summary,
         moat_notes: m.moat_notes,

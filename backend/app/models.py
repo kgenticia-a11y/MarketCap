@@ -323,7 +323,7 @@ class Notification(Base):
     message    = Column(String, nullable=False)
     link       = Column(String, nullable=True)
     read_at    = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User")
 
