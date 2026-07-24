@@ -67,6 +67,7 @@ All backend settings live in `backend/.env`. See `backend/.env.example` for the 
 | `AUTO_FIXER_ENABLED`      | Run the local code auto-fixer every N hours (dev only)     |
 | `AUTO_FIXER_INTERVAL_HOURS` | Interval for the auto-fixer loop                         |
 | `CHECKPOINT_CRON_SECRET`  | Shared secret for the weekly memo auto-checkpoint endpoint. Must match the `marketcap_checkpoint_key` vault secret in Supabase. Empty disables the endpoint. |
+| `INTERNAL_API_KEY`        | Shared secret for the daily `/internal/earnings-batch` endpoint. Must match the `INTERNAL_API_KEY` secret set on the `earnings-recap-trigger` edge function. Empty rejects every batch call (401), disabling the daily recap automation. |
 
 Frontend config is in `frontend/.env` — only `VITE_API_URL`.
 

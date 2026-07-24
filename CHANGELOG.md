@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-24 — Cron schedules for earnings recaps + weekly digest
+
+### Fixed
+
+- **Armed the two engagement edge functions that were never scheduled.** The
+  `earnings-recap-trigger` (Batch 2) and `weekly-digest-trigger` (Batch 5)
+  edge functions were deployed but had no pg_cron trigger, so neither ever
+  fired. Added two idempotent migrations following the existing
+  memo-checkpoint pattern:
+  - `20260724000000_earnings_recap_cron.sql` — daily 06:00 UTC POST to
+    `earnings-recap-trigger`.
+  - `20260724000100_weekly_digest_cron.sql` — Mondays 09:00 UTC POST to
+    `weekly-digest-trigger`.
+  Both read `marketcap_functions_url` + `marketcap_service_role_key` vault
+  secrets (set out-of-band before applying).
+- **Documented `INTERNAL_API_KEY`.** The `/internal/earnings-batch` endpoint
+  reads this secret but it was absent from `.env.example` and the README; a
+  missing value silently 401s the daily recap cron. Now documented in both.
+
 ## 2026-07-21 — Investment memos + thesis tracking
 
 New guided workflow for evaluating a stock the way a corp-dev team evaluates
