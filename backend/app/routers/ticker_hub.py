@@ -174,26 +174,34 @@ async def get_ticker_news(
     cache_by_url = {row.url: row for row in cached_rows}
 
     uncached = [item for item in raw_news if item["url"] not in cache_by_url]
-    quota_ok = (
-        bool(uncached)
-        and ai_guard.daily_quota.check_and_increment(current_user.id)
-    )
 
     new_summaries: list[models.TickerNewsSummary] = []
     for item in uncached:
-        summary_text: Optional[str] = None
-        if quota_ok:
-            headline = ai_guard.sanitize_text(item["title"], max_len=300)
-            try:
-                summary_text = await claude.ask_claude_text(
-                    system=_NEWS_SUMMARY_SYSTEM,
-                    prompt=f'Summarise this financial headline in one sentence: "{headline}"',
-                    max_tokens=80,
-                )
-                summary_text = ai_guard.sanitize_text(summary_text, max_len=500)
-            except Exception as exc:
-                logger.warning("News summary AI call failed for %s: %s", item["url"], exc)
-                summary_text = None
+        # One quota unit per AI call — a single request summarising up to 5
+        # uncached URLs must cost 5 units, not 1. Once the user is over budget
+        # we stop calling; the remaining items are still returned below, just
+        # without a summary.
+        if not ai_guard.daily_quota.check_and_increment(current_user.id):
+            break
+
+        headline = ai_guard.sanitize_text(item["title"], max_len=300)
+        try:
+            summary_text: Optional[str] = await claude.ask_claude_text(
+                system=_NEWS_SUMMARY_SYSTEM,
+                prompt=f'Summarise this financial headline in one sentence: "{headline}"',
+                max_tokens=80,
+            )
+            summary_text = ai_guard.sanitize_text(summary_text, max_len=500)
+        except Exception as exc:
+            logger.warning("News summary AI call failed for %s: %s", item["url"], exc)
+            summary_text = None
+
+        # Only cache a row when we actually produced a summary. TickerNewsSummary
+        # is a shared, URL-keyed cache: a persisted NULL-summary row is a
+        # permanent cache hit for EVERY user and the URL would never be
+        # re-summarised. Skipping the insert lets a later request retry it.
+        if not summary_text:
+            continue
 
         pub_ts = item.get("published_ts") or 0
         pub_dt: Optional[datetime] = None

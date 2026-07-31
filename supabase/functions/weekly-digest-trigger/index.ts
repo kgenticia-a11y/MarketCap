@@ -189,6 +189,16 @@ Deno.serve(async (_req: Request): Promise<Response> => {
           impacts = (impactRows ?? []) as NewsImpact[];
         }
 
+        // Engagement gate: only notify/email users whose digest actually has
+        // something in it. A brand-new user with no portfolio snapshots and no
+        // memo news impacts would otherwise get an empty "digest is ready"
+        // email and notification every Monday.
+        const hasContent = currentValue !== null || impacts.length > 0;
+        if (!hasContent) {
+          results.push({ user_id: user.id, email: user.email, status: "skipped_empty" });
+          continue;
+        }
+
         // Insert digest notification
         await supabase.from("notifications").insert({
           user_id: user.id,
@@ -231,12 +241,14 @@ Deno.serve(async (_req: Request): Promise<Response> => {
 
     const sent = results.filter((r) => r.status === "sent").length;
     const notifOnly = results.filter((r) => r.status === "notification_only").length;
+    const skippedEmpty = results.filter((r) => r.status === "skipped_empty").length;
     return new Response(
       JSON.stringify({
         message: "Digest run complete",
         users_processed: users.length,
         emails_sent: sent,
         notifications_only: notifOnly,
+        skipped_empty: skippedEmpty,
         results,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },

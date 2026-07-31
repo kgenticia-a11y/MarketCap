@@ -2237,7 +2237,13 @@ def _fetch_quarterly_metrics(ticker: str) -> dict:
                 net_row = stmt.loc[name]
 
         for col in cols:
-            date_str = col.strftime("%Y-Q%q") if hasattr(col, "strftime") else str(col)[:7]
+            # %q is NOT a valid strftime directive — it renders literally as
+            # "%q", so every label used to read "2024-Q%q". Compute the calendar
+            # quarter from the month instead.
+            if hasattr(col, "month") and hasattr(col, "year"):
+                date_str = f"{col.year}-Q{(col.month - 1) // 3 + 1}"
+            else:
+                date_str = str(col)[:7]
             out["dates"].append(date_str)
 
             rev = float(revenue_row[col]) if revenue_row is not None and col in revenue_row.index and revenue_row[col] == revenue_row[col] else None
