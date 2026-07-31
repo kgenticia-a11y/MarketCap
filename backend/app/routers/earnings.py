@@ -32,6 +32,10 @@ _TICKER_PATH = Path(..., min_length=1, max_length=10, pattern=r"^[A-Za-z0-9.\-]+
 # X-Internal-Key header so the batch endpoint doesn't need user JWTs.
 _INTERNAL_KEY = os.environ.get("INTERNAL_API_KEY", "")
 
+# Cap on how many tickers the calendar endpoint fans out to yfinance per request,
+# so a user tracking hundreds of names can't trigger hundreds of upstream calls.
+_CALENDAR_TICKER_LIMIT = 40
+
 _RECAP_SYSTEM = (
     "You are a financial analyst. Given a user's investment memo and the most "
     "recent quarterly earnings data for the company, analyse how the results "
@@ -54,19 +58,7 @@ class BatchTriggerRequest(BaseModel):
     items: list[dict]  # [{ticker, memo_id, earnings_date, thesis_summary, ...}]
 
 
-# ── AI reliability dependency (reused from ai router) ───────────────────────
-
-def _ai_user(
-    current_user: models.User = Depends(auth.get_current_user),
-) -> models.User:
-    if not ai_guard.daily_quota.check_and_increment(current_user.id):
-        raise HTTPException(
-            429,
-            "Daily AI usage limit reached. Your quota resets at midnight UTC.",
-            headers={"Retry-After": "3600"},
-        )
-    return current_user
-
+# ── AI error mapping ────────────────────────────────────────────────────────
 
 def _ai_error_to_http(exc: Exception):
     if isinstance(exc, claude.AINotConfigured):
@@ -107,8 +99,8 @@ async def _generate_recap(
         ea = row.get("eps_actual")
         ee = row.get("eps_estimate")
         sp = row.get("surprise_pct")
-        line = f"  {q}: EPS actual ${ea:.2f}" if ea else f"  {q}: EPS actual N/A"
-        if ee:
+        line = f"  {q}: EPS actual ${ea:.2f}" if ea is not None else f"  {q}: EPS actual N/A"
+        if ee is not None:
             line += f" vs estimate ${ee:.2f}"
         if sp is not None:
             line += f" ({sp:+.1f}%)"
@@ -121,11 +113,11 @@ async def _generate_recap(
     operating_margin = fundamentals.get("operating_margin_pct")
 
     fundamentals_ctx = (
-        f"Revenue growth: {revenue_growth:.1f}%\n" if revenue_growth else ""
+        f"Revenue growth: {revenue_growth:.1f}%\n" if revenue_growth is not None else ""
     ) + (
-        f"Earnings growth: {earnings_growth:.1f}%\n" if earnings_growth else ""
+        f"Earnings growth: {earnings_growth:.1f}%\n" if earnings_growth is not None else ""
     ) + (
-        f"Operating margin: {operating_margin:.1f}%\n" if operating_margin else ""
+        f"Operating margin: {operating_margin:.1f}%\n" if operating_margin is not None else ""
     )
 
     thesis_ctx = "\n".join(filter(None, [
@@ -185,6 +177,43 @@ Return a JSON object with exactly these keys:
     return recap
 
 
+async def _earnings_reported_near(
+    ticker: str, earnings_date: str, window_days: int = 4
+) -> bool:
+    """True if the ticker actually reported earnings within `window_days` of
+    `earnings_date`.
+
+    The daily edge function sends every published memo with earnings_date set to
+    yesterday and relies on this check — without it, because the recap uniqueness
+    key is (memo_id, earnings_date) and the date advances daily, every memo would
+    get a fresh AI recap (and a false "recap generated" notification) every day.
+
+    yfinance's earnings_history is indexed by the actual report date, so the most
+    recent reported quarter lands within a few days of `earnings_date` only when
+    earnings genuinely just occurred. Past quarters (~90d away) and future
+    estimated dates fall outside the window and are correctly rejected.
+    """
+    try:
+        target = date.fromisoformat(earnings_date[:10])
+    except (ValueError, TypeError):
+        return False
+    try:
+        hist = await market_data.get_ticker_earnings_history(ticker)
+    except Exception:
+        return False
+    for row in hist or []:
+        q = row.get("quarter")
+        if not q:
+            continue
+        try:
+            reported = date.fromisoformat(str(q)[:10])
+        except ValueError:
+            continue
+        if abs((reported - target).days) <= window_days:
+            return True
+    return False
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("/earnings/calendar")
@@ -198,12 +227,21 @@ async def get_user_earnings_calendar(
 
     Fetches yfinance calendar for each tracked ticker in parallel (concurrency
     limited to 5) and returns only those falling within `weeks` from today.
-    """
-    tickers: set[str] = set()
 
-    if filter in ("all", "watchlist"):
-        rows = db.query(models.Watchlist.ticker).filter_by(user_id=current_user.id).all()
-        tickers.update(r[0] for r in rows)
+    The number of tickers fanned out is capped at `_CALENDAR_TICKER_LIMIT` so a
+    user tracking hundreds of names can't trigger hundreds of upstream calendar
+    fetches on one request. Tickers are prioritised memos > portfolio > watchlist
+    (memos are the ones with thesis recaps, so most relevant to this view).
+    """
+    memo_list: list[str] = []
+    portfolio_list: list[str] = []
+    watchlist_list: list[str] = []
+
+    if filter in ("all", "memos"):
+        memo_list = [
+            r[0] for r in
+            db.query(models.InvestmentMemo.ticker).filter_by(user_id=current_user.id).distinct().all()
+        ]
 
     if filter in ("all", "portfolio"):
         port_ids = [
@@ -211,17 +249,29 @@ async def get_user_earnings_calendar(
             db.query(models.Portfolio.id).filter_by(user_id=current_user.id).all()
         ]
         if port_ids:
-            rows = (
+            portfolio_list = [
+                r[0] for r in
                 db.query(models.PortfolioItem.ticker)
                 .filter(models.PortfolioItem.portfolio_id.in_(port_ids))
                 .distinct()
                 .all()
-            )
-            tickers.update(r[0] for r in rows)
+            ]
 
-    if filter in ("all", "memos"):
-        rows = db.query(models.InvestmentMemo.ticker).filter_by(user_id=current_user.id).distinct().all()
-        tickers.update(r[0] for r in rows)
+    if filter in ("all", "watchlist"):
+        watchlist_list = [
+            r[0] for r in
+            db.query(models.Watchlist.ticker).filter_by(user_id=current_user.id).all()
+        ]
+
+    # Deduplicate while preserving priority order, then cap the fan-out.
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for src in (memo_list, portfolio_list, watchlist_list):
+        for t in src:
+            if t not in seen:
+                seen.add(t)
+                ordered.append(t)
+    tickers = ordered[:_CALENDAR_TICKER_LIMIT]
 
     if not tickers:
         return {"events": [], "tickers_checked": 0}
@@ -330,12 +380,14 @@ async def get_earnings_recap(
 async def generate_earnings_recap(
     body: RecapGenerateRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(_ai_user),
+    current_user: models.User = Depends(auth.get_current_user),
 ):
     """Generate and store an AI earnings recap on demand.
 
     Idempotent — returns existing recap if one already exists for this
-    (memo_id, earnings_date) pair.
+    (memo_id, earnings_date) pair. The daily AI quota is only consumed on a
+    genuine cache miss (i.e. when an AI call actually happens), so repeatedly
+    opening a ticker with an existing recap never drains the user's budget.
     """
     t = body.ticker.upper()
 
@@ -364,6 +416,14 @@ async def generate_earnings_recap(
             "created_at": existing.created_at.isoformat() if existing.created_at else None,
             "from_cache": True,
         }
+
+    # Cache miss — now consume one AI quota unit.
+    if not ai_guard.daily_quota.check_and_increment(current_user.id):
+        raise HTTPException(
+            429,
+            "Daily AI usage limit reached. Your quota resets at midnight UTC.",
+            headers={"Retry-After": "3600"},
+        )
 
     try:
         recap_dict = await _generate_recap(t, memo, body.earnings_date)
@@ -457,6 +517,13 @@ async def earnings_batch_trigger(
         )
         if existing:
             results.append({"ticker": ticker, "status": "already_exists"})
+            continue
+
+        # Verify earnings actually occurred near this date. The edge function
+        # sends every published memo daily with earnings_date=yesterday; without
+        # this gate every memo would get a recap + notification every single day.
+        if not await _earnings_reported_near(ticker, earnings_date):
+            results.append({"ticker": ticker, "status": "skipped", "reason": "no earnings near date"})
             continue
 
         # Reconstruct a minimal memo-like object from the edge function payload

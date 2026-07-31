@@ -45,18 +45,17 @@ class NewsImpactRequest(BaseModel):
     published_at: Optional[str] = None  # ISO timestamp string or None
 
 
-# ── AI quota dependency ──────────────────────────────────────────────────────
+# ── AI quota helper ──────────────────────────────────────────────────────────
 
-def _ai_user(
-    current_user: models.User = Depends(auth.get_current_user),
-) -> models.User:
-    if not ai_guard.daily_quota.check_and_increment(current_user.id):
+def _consume_ai_quota(user_id: int) -> None:
+    """Consume one daily AI-quota unit or raise 429. Call only on a genuine
+    cache miss, so idempotent cache hits never drain the user's budget."""
+    if not ai_guard.daily_quota.check_and_increment(user_id):
         raise HTTPException(
             429,
             "Daily AI usage limit reached. Your quota resets at midnight UTC.",
             headers={"Retry-After": "3600"},
         )
-    return current_user
 
 
 # ── Helper: build enriched news item ────────────────────────────────────────
@@ -206,12 +205,13 @@ async def get_news_feed(
 async def generate_news_impact(
     body: NewsImpactRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(_ai_user),
+    current_user: models.User = Depends(auth.get_current_user),
 ):
     """Generate and store an AI thesis-impact flag for one news headline.
 
     Idempotent — returns the existing row if one already exists for this
-    (memo_id, url) pair.
+    (memo_id, url) pair. The daily AI quota is consumed only on a genuine cache
+    miss, so re-opening a headline that's already flagged never spends budget.
     """
     # Auth: memo must belong to calling user and be published
     memo = (
@@ -230,6 +230,9 @@ async def generate_news_impact(
     )
     if existing:
         return _impact_row_to_dict(existing, from_cache=True)
+
+    # Cache miss — now consume one AI quota unit.
+    _consume_ai_quota(current_user.id)
 
     # Build thesis context from memo fields
     thesis_ctx = "\n".join(filter(None, [
