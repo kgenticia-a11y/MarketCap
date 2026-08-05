@@ -195,6 +195,16 @@ class DailyQuota:
             self._counts[user_id] = used + 1
             return True
 
+    def decrement(self, user_id: int) -> None:
+        """Refund one quota unit — call when an AI request fails before producing output."""
+        today = datetime.now(timezone.utc).date()
+        with self._lock:
+            if today != self._day:
+                return  # quota already reset; nothing to refund
+            count = self._counts.get(user_id, 0)
+            if count > 0:
+                self._counts[user_id] = count - 1
+
 
 # Shared instance used by the /ai router dependency.
 daily_quota = DailyQuota(limit_per_day=200)

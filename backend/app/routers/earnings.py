@@ -180,18 +180,17 @@ Return a JSON object with exactly these keys:
 async def _earnings_reported_near(
     ticker: str, earnings_date: str, window_days: int = 4
 ) -> bool:
-    """True if the ticker actually reported earnings within `window_days` of
-    `earnings_date`.
+    """True if the ticker actually reported earnings near `earnings_date`.
 
     The daily edge function sends every published memo with earnings_date set to
     yesterday and relies on this check — without it, because the recap uniqueness
     key is (memo_id, earnings_date) and the date advances daily, every memo would
     get a fresh AI recap (and a false "recap generated" notification) every day.
 
-    yfinance's earnings_history is indexed by the actual report date, so the most
-    recent reported quarter lands within a few days of `earnings_date` only when
-    earnings genuinely just occurred. Past quarters (~90d away) and future
-    estimated dates fall outside the window and are correctly rejected.
+    yfinance's earnings_history is indexed by fiscal quarter-end dates, not
+    announcement dates. US companies typically announce 15-95 days after the
+    fiscal period ends, so we check whether any row with a confirmed actual EPS
+    has its fiscal end within that lag window before `earnings_date`.
     """
     try:
         target = date.fromisoformat(earnings_date[:10])
@@ -203,13 +202,18 @@ async def _earnings_reported_near(
         return False
     for row in hist or []:
         q = row.get("quarter")
-        if not q:
+        # Only quarters with confirmed actuals count; estimated rows mean the
+        # quarter hasn't been announced yet.
+        if not q or row.get("eps_actual") is None:
             continue
         try:
-            reported = date.fromisoformat(str(q)[:10])
+            fiscal_end = date.fromisoformat(str(q)[:10])
         except ValueError:
             continue
-        if abs((reported - target).days) <= window_days:
+        # Announcement lag: 15–95 days after fiscal quarter end covers virtually
+        # all US reporting windows (SEC allows up to 75 days for large filers).
+        days_lag = (target - fiscal_end).days
+        if 15 <= days_lag <= 95:
             return True
     return False
 
@@ -424,6 +428,24 @@ async def generate_earnings_recap(
             "Daily AI usage limit reached. Your quota resets at midnight UTC.",
             headers={"Retry-After": "3600"},
         )
+
+    # Double-check: a concurrent request may have inserted the recap between our
+    # first check and the quota increment above, so re-verify before the AI call.
+    existing = (
+        db.query(models.AIEarningsRecap)
+        .filter_by(memo_id=body.memo_id, earnings_date=body.earnings_date)
+        .first()
+    )
+    if existing:
+        return {
+            "id": existing.id,
+            "ticker": existing.ticker,
+            "memo_id": existing.memo_id,
+            "earnings_date": existing.earnings_date,
+            "recap": json.loads(existing.recap_json),
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+            "from_cache": True,
+        }
 
     try:
         recap_dict = await _generate_recap(t, memo, body.earnings_date)

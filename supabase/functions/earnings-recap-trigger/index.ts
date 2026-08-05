@@ -32,22 +32,33 @@ Deno.serve(async (_req: Request): Promise<Response> => {
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
-    // Find all published memos — we'll check their ticker earnings dates via
-    // the batch endpoint. The edge function passes memo context so the FastAPI
-    // batch handler doesn't need to re-query Supabase for each ticker.
-    const { data: memos, error: memosErr } = await supabase
-      .from("investment_memos")
-      .select("id, user_id, ticker, thesis_summary, moat_notes, financial_health_notes, risks")
-      .eq("status", "published");
-
-    if (memosErr) {
-      return new Response(
-        JSON.stringify({ error: "Failed to query memos", detail: memosErr.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+    // Find all published memos with pagination (PostgREST caps unpaginated queries at max-rows)
+    const memos: {
+      id: string; user_id: string; ticker: string;
+      thesis_summary: string; moat_notes: string;
+      financial_health_notes: string; risks: string;
+    }[] = [];
+    const MEMO_PAGE_SIZE = 1000;
+    let memoPageFrom = 0;
+    while (true) {
+      const { data: page, error: pageErr } = await supabase
+        .from("investment_memos")
+        .select("id, user_id, ticker, thesis_summary, moat_notes, financial_health_notes, risks")
+        .eq("status", "published")
+        .range(memoPageFrom, memoPageFrom + MEMO_PAGE_SIZE - 1);
+      if (pageErr) {
+        return new Response(
+          JSON.stringify({ error: "Failed to query memos", detail: pageErr.message }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (!page || page.length === 0) break;
+      memos.push(...page);
+      if (page.length < MEMO_PAGE_SIZE) break;
+      memoPageFrom += MEMO_PAGE_SIZE;
     }
 
-    if (!memos || memos.length === 0) {
+    if (memos.length === 0) {
       return new Response(
         JSON.stringify({ message: "No published memos found", processed: 0 }),
         { status: 200, headers: { "Content-Type": "application/json" } },

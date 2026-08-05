@@ -103,19 +103,28 @@ Deno.serve(async (_req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Fetch all users
-    const { data: users, error: usersErr } = await supabase
-      .from("users")
-      .select("id, email, name");
-
-    if (usersErr) {
-      return new Response(
-        JSON.stringify({ error: "Failed to query users", detail: usersErr.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+    // Fetch all users with pagination (PostgREST caps unpaginated queries at max-rows)
+    const users: { id: string; email: string; name: string }[] = [];
+    const PAGE_SIZE = 1000;
+    let pageFrom = 0;
+    while (true) {
+      const { data: page, error: pageErr } = await supabase
+        .from("users")
+        .select("id, email, name")
+        .range(pageFrom, pageFrom + PAGE_SIZE - 1);
+      if (pageErr) {
+        return new Response(
+          JSON.stringify({ error: "Failed to query users", detail: pageErr.message }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (!page || page.length === 0) break;
+      users.push(...page);
+      if (page.length < PAGE_SIZE) break;
+      pageFrom += PAGE_SIZE;
     }
 
-    if (!users || users.length === 0) {
+    if (users.length === 0) {
       return new Response(
         JSON.stringify({ message: "No users found", processed: 0 }),
         { status: 200, headers: { "Content-Type": "application/json" } },

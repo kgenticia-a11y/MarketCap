@@ -132,9 +132,9 @@ async def get_news_feed(
     if not all_tickers:
         return {"items": [], "tickers_checked": 0}
 
-    # Prioritise memo tickers; fill remainder from the broader set
+    # Prioritise memo tickers; fill remainder from the broader set in stable order
     ordered: list[str] = list(memo_tickers.keys())
-    for t in all_tickers:
+    for t in sorted(all_tickers):
         if t not in memo_tickers:
             ordered.append(t)
     ordered = ordered[:_FEED_TICKER_LIMIT]

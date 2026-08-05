@@ -118,14 +118,17 @@ async def get_ticker_hub(
             ),
         }
 
+    # get_ticker_details wraps its payload in {"results": {...}}
+    details_inner = details.get("results", {}) if isinstance(details, dict) else {}
+
     return {
         "ticker": ticker,
-        "name": details.get("name") or fundamentals.get("name"),
+        "name": details_inner.get("name") or fundamentals.get("name"),
         "price": quote.get("price"),
         "change_pct": quote.get("change_pct"),
-        "market_cap": details.get("market_cap") or quote.get("market_cap") or fundamentals.get("market_cap"),
-        "sector": details.get("sector") or fundamentals.get("sector"),
-        "industry": details.get("industry") or fundamentals.get("industry"),
+        "market_cap": details_inner.get("market_cap") or quote.get("market_cap") or fundamentals.get("market_cap"),
+        "sector": details_inner.get("sector") or fundamentals.get("sector"),
+        "industry": details_inner.get("industry") or fundamentals.get("industry"),
         # Key metrics
         "revenue_growth_pct": fundamentals.get("revenue_growth_pct"),
         "gross_margin_pct": fundamentals.get("gross_margin_pct"),
@@ -133,8 +136,8 @@ async def get_ticker_hub(
         "net_margin_pct": fundamentals.get("profit_margin_pct"),
         "roe_pct": fundamentals.get("roe_pct"),
         "debt_to_equity": fundamentals.get("debt_to_equity"),
-        "week_52_high": details.get("week_52_high"),
-        "week_52_low": details.get("week_52_low"),
+        "week_52_high": details_inner.get("week_52_high"),
+        "week_52_low": details_inner.get("week_52_low"),
         # Quarterly sparklines
         "quarterly": quarterly if isinstance(quarterly, dict) else {},
         # Next earnings date (within 30-day window shown in UI)
@@ -194,6 +197,7 @@ async def get_ticker_news(
             summary_text = ai_guard.sanitize_text(summary_text, max_len=500)
         except Exception as exc:
             logger.warning("News summary AI call failed for %s: %s", item["url"], exc)
+            ai_guard.daily_quota.decrement(current_user.id)
             summary_text = None
 
         # Only cache a row when we actually produced a summary. TickerNewsSummary
