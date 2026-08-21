@@ -111,6 +111,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
       const { data: page, error: pageErr } = await supabase
         .from("users")
         .select("id, email, name")
+        .order("id", { ascending: true })
         .range(pageFrom, pageFrom + PAGE_SIZE - 1);
       if (pageErr) {
         return new Response(

@@ -45,6 +45,7 @@ Deno.serve(async (_req: Request): Promise<Response> => {
         .from("investment_memos")
         .select("id, user_id, ticker, thesis_summary, moat_notes, financial_health_notes, risks")
         .eq("status", "published")
+        .order("id", { ascending: true })
         .range(memoPageFrom, memoPageFrom + MEMO_PAGE_SIZE - 1);
       if (pageErr) {
         return new Response(

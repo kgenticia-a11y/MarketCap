@@ -180,17 +180,17 @@ Return a JSON object with exactly these keys:
 async def _earnings_reported_near(
     ticker: str, earnings_date: str, window_days: int = 4
 ) -> bool:
-    """True if the ticker actually reported earnings near `earnings_date`.
+    """True if the ticker actually reported earnings within `window_days` of `earnings_date`.
 
     The daily edge function sends every published memo with earnings_date set to
     yesterday and relies on this check — without it, because the recap uniqueness
     key is (memo_id, earnings_date) and the date advances daily, every memo would
     get a fresh AI recap (and a false "recap generated" notification) every day.
 
-    yfinance's earnings_history is indexed by fiscal quarter-end dates, not
-    announcement dates. US companies typically announce 15-95 days after the
-    fiscal period ends, so we check whether any row with a confirmed actual EPS
-    has its fiscal end within that lag window before `earnings_date`.
+    yfinance's earnings_history is indexed by the actual announcement date (the
+    date results were published, not the fiscal quarter-end date), so a tight
+    ±window_days check reliably detects whether earnings were announced near
+    `earnings_date`.
     """
     try:
         target = date.fromisoformat(earnings_date[:10])
@@ -202,18 +202,15 @@ async def _earnings_reported_near(
         return False
     for row in hist or []:
         q = row.get("quarter")
-        # Only quarters with confirmed actuals count; estimated rows mean the
-        # quarter hasn't been announced yet.
+        # Only rows with confirmed actuals count; rows with no eps_actual mean
+        # the quarter hasn't been announced yet.
         if not q or row.get("eps_actual") is None:
             continue
         try:
-            fiscal_end = date.fromisoformat(str(q)[:10])
+            reported = date.fromisoformat(str(q)[:10])
         except ValueError:
             continue
-        # Announcement lag: 15–95 days after fiscal quarter end covers virtually
-        # all US reporting windows (SEC allows up to 75 days for large filers).
-        days_lag = (target - fiscal_end).days
-        if 15 <= days_lag <= 95:
+        if abs((reported - target).days) <= window_days:
             return True
     return False
 
@@ -437,6 +434,7 @@ async def generate_earnings_recap(
         .first()
     )
     if existing:
+        ai_guard.daily_quota.decrement(current_user.id)
         return {
             "id": existing.id,
             "ticker": existing.ticker,

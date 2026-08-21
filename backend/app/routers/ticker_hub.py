@@ -119,7 +119,7 @@ async def get_ticker_hub(
         }
 
     # get_ticker_details wraps its payload in {"results": {...}}
-    details_inner = details.get("results", {}) if isinstance(details, dict) else {}
+    details_inner = (details.get("results") or {}) if isinstance(details, dict) else {}
 
     return {
         "ticker": ticker,
@@ -187,8 +187,8 @@ async def get_ticker_news(
         if not ai_guard.daily_quota.check_and_increment(current_user.id):
             break
 
-        headline = ai_guard.sanitize_text(item["title"], max_len=300)
         try:
+            headline = ai_guard.sanitize_text(item["title"], max_len=300)
             summary_text: Optional[str] = await claude.ask_claude_text(
                 system=_NEWS_SUMMARY_SYSTEM,
                 prompt=f'Summarise this financial headline in one sentence: "{headline}"',
