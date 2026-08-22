@@ -27,6 +27,8 @@ build/
 
 # ── Databases & runtime files ─────────────────────────────────────────────
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 marketcap.db
