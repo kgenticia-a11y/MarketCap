@@ -39,7 +39,7 @@ export default function Stock() {
   const isWatched = watchlistData?.some((w: { ticker: string }) => w.ticker === upper) ?? false;
 
   const watchMutation = useMutation({
-    mutationFn: () => isWatched ? removeFromWatchlist(upper) : addToWatchlist(upper),
+    mutationFn: async () => { await (isWatched ? removeFromWatchlist(upper) : addToWatchlist(upper)); },
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: ["watchlist"] });
       const prev = qc.getQueryData<{ ticker: string }[]>(["watchlist"]) ?? [];

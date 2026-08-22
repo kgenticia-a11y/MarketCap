@@ -362,8 +362,7 @@ export default function Screener() {
     [watchlistData]
   );
   const watchMutation = useMutation({
-    mutationFn: (ticker: string) =>
-      watchedSet.has(ticker) ? removeFromWatchlist(ticker) : addToWatchlist(ticker),
+    mutationFn: async (ticker: string) => { await (watchedSet.has(ticker) ? removeFromWatchlist(ticker) : addToWatchlist(ticker)); },
     onMutate: async (ticker: string) => {
       await qc.cancelQueries({ queryKey: ["watchlist"] });
       const prev = qc.getQueryData<{ ticker: string }[]>(["watchlist"]) ?? [];

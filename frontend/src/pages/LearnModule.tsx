@@ -110,7 +110,7 @@ export default function LearnModule() {
   const [phase, setPhase] = useState<"read" | "quiz">("read");
   const [quizIndex, setQuizIndex] = useState(0);
   const [score, setScore] = useState(0);
-  const [answers, setAnswers] = useState<boolean[]>([]);
+  const [, setAnswers] = useState<boolean[]>([]);
   const [currentAnswered, setCurrentAnswered] = useState(false);
 
   if (!mod) {

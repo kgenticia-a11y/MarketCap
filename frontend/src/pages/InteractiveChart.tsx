@@ -143,7 +143,7 @@ export default function InteractiveChart() {
   const isWatched = watchlistData?.some((w: { ticker: string }) => w.ticker === activeTicker) ?? false;
 
   const watchMutation = useMutation({
-    mutationFn: () => isWatched ? removeFromWatchlist(activeTicker) : addToWatchlist(activeTicker),
+    mutationFn: async () => { await (isWatched ? removeFromWatchlist(activeTicker) : addToWatchlist(activeTicker)); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
   });
 

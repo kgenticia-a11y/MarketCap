@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -211,8 +211,7 @@ export default function TickerHub() {
   const isWatched = !!hub?.watchlist_item;
 
   const watchMutation = useMutation({
-    mutationFn: () =>
-      isWatched ? removeFromWatchlist(ticker) : addToWatchlist(ticker),
+    mutationFn: async () => { await (isWatched ? removeFromWatchlist(ticker) : addToWatchlist(ticker)); },
     onSuccess: () => {
       toast.success(isWatched ? `Removed ${ticker} from watchlist` : `Added ${ticker} to watchlist`);
       qc.invalidateQueries({ queryKey: ["ticker-hub", ticker] });
