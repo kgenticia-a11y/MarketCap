@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X, TrendingUp, TrendingDown } from "lucide-react";
 import {
@@ -53,7 +54,7 @@ export default function EtfDetailModal({ ticker, label, onClose }: Props) {
     price: b.c,
   }));
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
       onClick={onClose}
@@ -243,6 +244,7 @@ export default function EtfDetailModal({ ticker, label, onClose }: Props) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
