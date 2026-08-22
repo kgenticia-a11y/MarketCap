@@ -142,6 +142,15 @@ _indices_cache: tuple[list[dict], float] | None = None
 _indices_lock = asyncio.Lock()
 _INDICES_TTL = 60  # seconds
 
+_ETF_PERF_CACHE: dict[str, tuple[dict, float]] = {}
+_ETF_PERF_TTL = 300  # 5 minutes — daily/weekly bars don't need to be ultra-fresh
+
+_ETF_NAMES = {
+    "SPY": "S&P 500 ETF",
+    "QQQ": "NASDAQ ETF",
+    "DIA": "Dow Jones ETF",
+}
+
 _QUOTE_TTL   =  30   # seconds — price data refreshes frequently
 _DETAILS_TTL = 300   # 5 min  — company fundamentals rarely change intraday
 _CHART_1D_TTL  =  60   # 1 min  — intraday candles need to be fairly fresh
@@ -560,6 +569,89 @@ async def get_market_indices() -> list[dict]:
         if result:
             _indices_cache = (result, now)
         return result
+
+
+def _fetch_etf_performance(ticker: str) -> dict:
+    """Fetch intraday + 1-year daily bars for one ETF and compute period stats."""
+    t_obj = yf.Ticker(ticker)
+    intraday = t_obj.history(period="1d", interval="1m")
+    hist_1y = t_obj.history(period="1y", interval="1d")
+
+    def df_to_bars(df) -> list[dict]:
+        bars: list[dict] = []
+        for ts, row in df.iterrows():
+            try:
+                bars.append({
+                    "t": int(ts.timestamp() * 1000),
+                    "o": round(float(row["Open"]), 2),
+                    "h": round(float(row["High"]), 2),
+                    "l": round(float(row["Low"]), 2),
+                    "c": round(float(row["Close"]), 2),
+                    "v": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
+                })
+            except Exception:
+                pass
+        return bars
+
+    def period_stats(start_price, end_price, bars: list[dict]) -> dict:
+        if not bars or start_price is None or end_price is None or start_price == 0:
+            return {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": bars}
+        return {
+            "change_pct": round((end_price / start_price - 1) * 100, 2),
+            "change_abs": round(end_price - start_price, 2),
+            "high": round(max(b["h"] for b in bars), 2),
+            "low": round(min(b["l"] for b in bars), 2),
+            "bars": bars,
+        }
+
+    intraday_bars = df_to_bars(intraday)
+    daily_bars = df_to_bars(hist_1y)
+    n = len(daily_bars)
+
+    # 1D: open of first intraday bar vs close of last (today open→now)
+    if intraday_bars:
+        p1d = period_stats(intraday_bars[0]["o"], intraday_bars[-1]["c"], intraday_bars)
+    else:
+        p1d = {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": []}
+
+    # 1W: reference = close 5 trading days ago; chart = last 5 days
+    if n >= 2:
+        w_ref = daily_bars[max(0, n - 6)]["c"]
+        p1w = period_stats(w_ref, daily_bars[-1]["c"], daily_bars[max(0, n - 5):])
+    else:
+        p1w = {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": daily_bars}
+
+    # 1M: reference = close 21 trading days ago; chart = last 21 days
+    if n >= 2:
+        m_ref = daily_bars[max(0, n - 22)]["c"]
+        p1m = period_stats(m_ref, daily_bars[-1]["c"], daily_bars[max(0, n - 21):])
+    else:
+        p1m = {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": daily_bars}
+
+    # 1Y: first vs last daily bar
+    if n >= 2:
+        p1y = period_stats(daily_bars[0]["c"], daily_bars[-1]["c"], daily_bars)
+    else:
+        p1y = {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": daily_bars}
+
+    price = daily_bars[-1]["c"] if daily_bars else None
+    return {
+        "ticker": ticker,
+        "name": _ETF_NAMES.get(ticker, ticker),
+        "price": price,
+        "periods": {"1D": p1d, "1W": p1w, "1M": p1m, "1Y": p1y},
+    }
+
+
+async def get_etf_performance(ticker: str) -> dict:
+    t = ticker.upper()
+    now = time.time()
+    entry = _ETF_PERF_CACHE.get(t)
+    if entry is not None and (now - entry[1]) < _ETF_PERF_TTL:
+        return entry[0]
+    result = await _run(_fetch_etf_performance, t)
+    _ETF_PERF_CACHE[t] = (result, time.time())
+    return result
 
 
 # Canonical stock universe — the single source of truth for breadth,

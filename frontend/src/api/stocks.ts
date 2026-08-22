@@ -57,3 +57,35 @@ export const getEarningsCalendar = (weekOffset: number = 0) =>
 export const getEconomicCalendar = (weekOffset: number = 0) =>
   client.get("/stocks/economic/calendar", { params: { week_offset: weekOffset } }).then((r) => r.data);
 
+export interface EtfBar {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface EtfPeriod {
+  change_pct: number | null;
+  change_abs: number | null;
+  high: number | null;
+  low: number | null;
+  bars: EtfBar[];
+}
+
+export interface EtfPerformance {
+  ticker: string;
+  name: string;
+  price: number | null;
+  periods: {
+    "1D": EtfPeriod;
+    "1W": EtfPeriod;
+    "1M": EtfPeriod;
+    "1Y": EtfPeriod;
+  };
+}
+
+export const getEtfPerformance = (ticker: string) =>
+  client.get(`/stocks/etf/${ticker}/performance`).then((r) => r.data as EtfPerformance);
+

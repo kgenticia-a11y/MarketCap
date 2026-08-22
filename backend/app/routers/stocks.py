@@ -152,6 +152,22 @@ async def economic_calendar(week_offset: int = Query(0, ge=-4, le=8)):
         raise HTTPException(502, "Economic calendar unavailable.")
 
 
+_ETF_TICKERS = {"SPY", "QQQ", "DIA"}
+
+
+@router.get("/etf/{ticker}/performance")
+async def etf_performance(ticker: str):
+    """Return daily/weekly/monthly/annual performance + price bars for SPY, QQQ, or DIA."""
+    t = _validate_ticker(ticker)
+    if t not in _ETF_TICKERS:
+        raise HTTPException(400, "Ticker must be one of SPY, QQQ, DIA.")
+    try:
+        return await market_data.get_etf_performance(t)
+    except Exception:
+        logger.exception("etf_performance failed for %s", t)
+        raise HTTPException(502, "Market data unavailable.")
+
+
 @router.get("/market/update")
 async def market_update():
     try:

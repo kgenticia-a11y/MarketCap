@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getMarketOverview } from "../api/stocks";
 import ErrorBoundary from "../components/ErrorBoundary";
 import DailyBriefCard from "../components/DailyBriefCard";
 import ThesisNudgeCard from "../components/ThesisNudgeCard";
+import EtfDetailModal from "../components/EtfDetailModal";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -21,10 +23,13 @@ const INDEX_LABELS: Record<string, string> = {
   DIA: "DOW ETF",
 };
 
-function IndexCard({ snap }: { snap: StockSnap }) {
+function IndexCard({ snap, onClick }: { snap: StockSnap; onClick: () => void }) {
   const positive = snap.change_pct >= 0;
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 flex items-center justify-between">
+    <button
+      onClick={onClick}
+      className="bg-surface rounded-xl border border-border p-5 flex items-center justify-between w-full text-left hover:border-accent/50 hover:bg-surface-hover transition-colors"
+    >
       <div>
         <div className="text-xs text-muted mb-1">{INDEX_LABELS[snap.ticker] ?? snap.ticker}</div>
         <div className="text-xl font-bold text-white">
@@ -38,7 +43,7 @@ function IndexCard({ snap }: { snap: StockSnap }) {
         {positive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
         {positive ? "+" : ""}{snap.change_pct.toFixed(2)}%
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -53,6 +58,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = (searchParams.get("tab") ?? "overview") as Tab;
+  const [etfModal, setEtfModal] = useState<{ ticker: string; label: string } | null>(null);
 
   function setTab(key: Tab) {
     setSearchParams(key === "overview" ? {} : { tab: key }, { replace: true });
@@ -117,7 +123,13 @@ export default function Home() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {(overview?.indices ?? []).map((snap: StockSnap) => (
-            <IndexCard key={snap.ticker} snap={snap} />
+            <IndexCard
+              key={snap.ticker}
+              snap={snap}
+              onClick={() =>
+                setEtfModal({ ticker: snap.ticker, label: INDEX_LABELS[snap.ticker] ?? snap.ticker })
+              }
+            />
           ))}
         </div>
       )}
@@ -181,6 +193,14 @@ export default function Home() {
       </>}
 
     </div>
+
+    {etfModal && (
+      <EtfDetailModal
+        ticker={etfModal.ticker}
+        label={etfModal.label}
+        onClose={() => setEtfModal(null)}
+      />
+    )}
     </ErrorBoundary>
   );
 }
