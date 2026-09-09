@@ -449,8 +449,12 @@ async def generate_earnings_recap(
         recap_dict = await _generate_recap(t, memo, body.earnings_date)
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning("Recap JSON parse failed for %s: %s", t, exc)
+        # No recap was produced — refund the quota unit consumed above.
+        ai_guard.daily_quota.decrement(current_user.id)
         raise HTTPException(502, "AI returned an invalid response. Please try again.")
     except Exception as exc:
+        # AI call failed (timeout / provider error) — refund the quota unit.
+        ai_guard.daily_quota.decrement(current_user.id)
         _ai_error_to_http(exc)
 
     row = models.AIEarningsRecap(
@@ -472,6 +476,9 @@ async def generate_earnings_recap(
             .first()
         )
         if existing:
+            # A concurrent request already stored (and paid for) this recap;
+            # refund the quota unit rather than double-charging this caller.
+            ai_guard.daily_quota.decrement(current_user.id)
             return {
                 "id": existing.id,
                 "ticker": existing.ticker,

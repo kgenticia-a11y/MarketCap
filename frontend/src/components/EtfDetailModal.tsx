@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X, TrendingUp, TrendingDown } from "lucide-react";
@@ -32,6 +32,20 @@ const PERIOD_LABELS: Record<Period, string> = {
 
 export default function EtfDetailModal({ ticker, label, onClose }: Props) {
   const [period, setPeriod] = useState<Period>("1D");
+
+  // Dismiss on Escape and lock background scroll while the overlay is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["etf-performance", ticker],
@@ -141,7 +155,7 @@ export default function EtfDetailModal({ ticker, label, onClose }: Props) {
                         positive ? "text-positive" : "text-negative"
                       )}
                     >
-                      {positive ? "+" : ""}${Math.abs(pd.change_abs).toFixed(2)}
+                      {positive ? "+" : "-"}${Math.abs(pd.change_abs).toFixed(2)}
                     </span>
                   )}
                   <span className="text-xs text-muted ml-auto">

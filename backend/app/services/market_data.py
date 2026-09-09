@@ -581,13 +581,25 @@ def _fetch_etf_performance(ticker: str) -> dict:
         bars: list[dict] = []
         for ts, row in df.iterrows():
             try:
+                o = float(row["Open"])
+                h = float(row["High"])
+                l = float(row["Low"])
+                c = float(row["Close"])
+                # yfinance leaves NaN OHLC in forming/half-day bars (notably
+                # the trailing 1m bar). NaN survives round()/float() silently,
+                # then crashes JSON serialization — Starlette dumps with
+                # allow_nan=False, which raises AFTER the endpoint's try/except
+                # and 500s the whole request. Drop any bar with a NaN price.
+                if not (o == o and h == h and l == l and c == c):
+                    continue
+                v = row["Volume"]
                 bars.append({
                     "t": int(ts.timestamp() * 1000),
-                    "o": round(float(row["Open"]), 2),
-                    "h": round(float(row["High"]), 2),
-                    "l": round(float(row["Low"]), 2),
-                    "c": round(float(row["Close"]), 2),
-                    "v": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
+                    "o": round(o, 2),
+                    "h": round(h, 2),
+                    "l": round(l, 2),
+                    "c": round(c, 2),
+                    "v": int(v) if v == v else 0,
                 })
             except Exception:
                 pass
