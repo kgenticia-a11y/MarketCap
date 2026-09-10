@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { X, TrendingUp, TrendingDown } from "lucide-react";
+import { X, TrendingUp, TrendingDown, ArrowUpCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
   Area,
@@ -32,6 +33,7 @@ const PERIOD_LABELS: Record<Period, string> = {
 
 export default function EtfDetailModal({ ticker, label, onClose }: Props) {
   const [period, setPeriod] = useState<Period>("1D");
+  const navigate = useNavigate();
 
   // Dismiss on Escape and lock background scroll while the overlay is open.
   useEffect(() => {
@@ -92,12 +94,21 @@ export default function EtfDetailModal({ ticker, label, onClose }: Props) {
               </div>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted hover:text-white transition-colors p-1 -mt-1 -mr-1"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { onClose(); navigate("/markets"); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent/90 transition-colors"
+            >
+              <ArrowUpCircle size={13} />
+              Invest
+            </button>
+            <button
+              onClick={onClose}
+              className="text-muted hover:text-white transition-colors p-1 -mt-1 -mr-1"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Period tabs */}

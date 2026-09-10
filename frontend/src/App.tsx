@@ -29,6 +29,7 @@ import Earnings from "./pages/Earnings";
 import News from "./pages/News";
 import Learn from "./pages/Learn";
 import LearnModule from "./pages/LearnModule";
+import Markets from "./pages/Markets";
 
 /** Shorthand: wraps a page in both ProtectedRoute and Layout */
 function Private({ title, fullHeight, children }: {
@@ -55,6 +56,7 @@ function AppRoutes() {
       <Route path="/portfolio" element={<Private title="Portfolio"><Portfolio /></Private>} />
       <Route path="/watchlist" element={<Navigate to="/?tab=watchlist" replace />} />
       <Route path="/market"   element={<Private title="Market Update"><MarketUpdate /></Private>} />
+      <Route path="/markets"  element={<Private title="Market Indexes"><Markets /></Private>} />
       <Route path="/income"   element={<Private title="Income Estimator"><IncomeEstimator /></Private>} />
       <Route path="/settings" element={<Private title="Settings"><Settings /></Private>} />
       <Route path="/history"  element={<Private title="History"><History /></Private>} />

@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   NotebookPen,
+  Globe2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -33,6 +34,7 @@ import { PAPER_TRADING_ENABLED } from "../env";
 // doesn't compete with these for attention.
 const menu = [
   { label: "Dashboard",      icon: LayoutDashboard, to: "/" },
+  { label: "Market Indexes", icon: Globe2,          to: "/markets" },
   { label: "Market Update",  icon: TrendingUp,      to: "/market" },
   { label: "Stock Screener", icon: ScanSearch,      to: "/screener" },
   { label: "Portfolio",      icon: Briefcase,       to: "/portfolio" },
