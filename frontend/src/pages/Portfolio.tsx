@@ -14,6 +14,7 @@ import {
   Trash2, Briefcase, TrendingUp, TrendingDown, DollarSign,
   Plus, Pencil, Check, X, Download, Brain, AlertTriangle,
   Globe, Activity, Shield, ChevronDown, ChevronUp, BarChart3,
+  Globe2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { clsx } from "clsx";
@@ -197,12 +198,19 @@ function RiskProfileModal({ onSave, onClose }: { onSave: (rp: RiskProfile) => vo
 }
 
 /* ── Add Position Form ─────────────────────────────────────────────────── */
+const INDEX_OPTIONS = [
+  { ticker: "SPY", name: "S&P 500 ETF" },
+  { ticker: "QQQ", name: "NASDAQ ETF" },
+  { ticker: "DIA", name: "Dow Jones ETF" },
+] as const;
+
 function AddPositionForm({ onAdded }: { onAdded: () => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<null | "stock" | "index">(null);
   const [ticker, setTicker] = useState("");
   const [shares, setShares] = useState("");
   const [price, setPrice] = useState("");
   const [err, setErr] = useState("");
+  const [priceLoading, setPriceLoading] = useState(false);
   const qc = useQueryClient();
 
   const add = useMutation({
@@ -213,7 +221,7 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
       qc.invalidateQueries({ queryKey: ["portfolio"] });
       qc.invalidateQueries({ queryKey: ["portfolio-analytics"] });
       toast.success(`${ticker.toUpperCase()} added to portfolio`);
-      setTicker(""); setShares(""); setPrice(""); setErr(""); setOpen(false);
+      setTicker(""); setShares(""); setPrice(""); setErr(""); setOpen(null);
       onAdded();
     },
     onError: (e: unknown) => {
@@ -232,26 +240,82 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
     add.mutate();
   }
 
-  if (!open) {
+  function openStock() {
+    setOpen("stock");
+    setTicker(""); setShares(""); setPrice(""); setErr("");
+  }
+
+  async function openIndex(t: string) {
+    setOpen("index");
+    setTicker(t); setShares(""); setPrice(""); setErr("");
+    // Auto-fill current price from live quote so the user only needs to
+    // enter the share count (or override the price if they bought earlier).
+    setPriceLoading(true);
+    try {
+      const q = await getQuote(t);
+      if (q?.price) setPrice(q.price.toFixed(2));
+    } catch {
+      // Silent: user can still enter the price manually.
+    } finally {
+      setPriceLoading(false);
+    }
+  }
+
+  if (open === null) {
     return (
-      <button onClick={() => setOpen(true)}
-        className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors">
-        <Plus size={15} /> Add Position
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={openStock}
+          className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors">
+          <Plus size={15} /> Add Position
+        </button>
+        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
+          <span className="flex items-center gap-1.5 text-xs text-muted px-2">
+            <Globe2 size={13} /> Index:
+          </span>
+          {INDEX_OPTIONS.map((idx) => (
+            <button
+              key={idx.ticker}
+              onClick={() => openIndex(idx.ticker)}
+              title={`Add ${idx.name} to your portfolio`}
+              className="text-xs font-semibold text-white bg-surface-hover hover:bg-accent/20 hover:text-accent rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              {idx.ticker}
+            </button>
+          ))}
+        </div>
+      </div>
     );
   }
+
+  const isIndex = open === "index";
+  const idxMeta = INDEX_OPTIONS.find((i) => i.ticker === ticker);
 
   return (
     <div className="bg-surface border border-border rounded-xl p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-white">New Position</p>
-        <button onClick={() => setOpen(false)} className="text-muted hover:text-white"><X size={15} /></button>
+        <p className="text-xs font-semibold text-white flex items-center gap-2">
+          {isIndex ? (
+            <>
+              <Globe2 size={13} className="text-accent" />
+              New Index Position{idxMeta && <span className="text-muted font-normal">— {idxMeta.name}</span>}
+            </>
+          ) : "New Position"}
+        </p>
+        <button onClick={() => setOpen(null)} className="text-muted hover:text-white"><X size={15} /></button>
       </div>
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
         <div>
           <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Ticker</label>
-          <input value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} placeholder="AAPL"
-            className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
+          <input
+            value={ticker}
+            onChange={e => setTicker(e.target.value.toUpperCase())}
+            placeholder={isIndex ? "SPY" : "AAPL"}
+            readOnly={isIndex}
+            className={clsx(
+              "w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent",
+              isIndex && "cursor-not-allowed opacity-80"
+            )}
+          />
         </div>
         <div>
           <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Shares</label>
@@ -259,7 +323,9 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
             className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
         </div>
         <div>
-          <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">Avg Buy Price</label>
+          <label className="text-[10px] text-muted uppercase tracking-widest block mb-1">
+            Avg Buy Price {isIndex && priceLoading && <span className="text-accent normal-case tracking-normal">(loading live price…)</span>}
+          </label>
           <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="150.00"
             className="w-full bg-surface-hover border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-accent" />
         </div>
@@ -268,9 +334,9 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
       <div className="flex gap-2 mt-3">
         <button onClick={submit} disabled={add.isPending}
           className="bg-accent hover:bg-accent/90 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-xs font-semibold transition-colors">
-          {add.isPending ? "Adding…" : "Add"}
+          {add.isPending ? "Adding…" : isIndex ? `Add ${ticker}` : "Add"}
         </button>
-        <button onClick={() => setOpen(false)} className="text-xs text-muted hover:text-white transition-colors px-3">
+        <button onClick={() => setOpen(null)} className="text-xs text-muted hover:text-white transition-colors px-3">
           Cancel
         </button>
       </div>

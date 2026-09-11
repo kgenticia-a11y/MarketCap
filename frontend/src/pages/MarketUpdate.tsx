@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
-import { getMarketUpdate, getEarningsCalendar, getEconomicCalendar } from "../api/stocks";
+import { getMarketUpdate, getMarketOverview, getEarningsCalendar, getEconomicCalendar } from "../api/stocks";
 import { getWatchlist, addToWatchlist } from "../api/watchlist";
 import { getPortfolio } from "../api/portfolio";
 import EarningsBriefModal from "../components/EarningsBriefModal";
@@ -99,12 +99,36 @@ const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as co
 
 /* ── Overview Tab ──────────────────────────────────────────────────────── */
 
+const INDEX_META: Record<string, string> = {
+  SPY: "S&P 500",
+  QQQ: "NASDAQ 100",
+  DIA: "Dow Jones",
+};
+const INDEX_TICKERS = ["SPY", "QQQ", "DIA"];
+
 function OverviewTab() {
   const { data, isLoading, isError } = useQuery<MarketData>({
     queryKey: ["market-update"],
     queryFn:  getMarketUpdate,
     staleTime: 60_000,
     refetchInterval: 60_000,
+  });
+
+  // Live indexes come from /stocks/market/overview which already returns
+  // SPY, QQQ, DIA quotes. Piggy-backing on the existing cached query keeps
+  // this cheap — the same fetch powers the Dashboard's index cards.
+  const { data: overview } = useQuery({
+    queryKey: ["market-overview"],
+    queryFn:  getMarketOverview,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  // Highlight indexes the user owns via their portfolio.
+  const { data: portfolioData } = useQuery<{ items?: { ticker: string; shares: number; avg_buy_price: number }[] }>({
+    queryKey: ["portfolio"],
+    queryFn:  getPortfolio,
+    staleTime: 60_000,
   });
 
   if (isLoading) {
@@ -143,6 +167,18 @@ function OverviewTab() {
   const losers  = data?.losers  ?? [];
   const breadth = data?.breadth ?? { advances: 0, declines: 0, unchanged: 0, total: 1 };
 
+  // Merge live index quotes with the user's portfolio positions (if any)
+  // so we can surface owned-share and P&L info alongside the raw quote.
+  const indexQuotes = new Map(
+    ((overview?.indices ?? []) as { ticker: string; price: number; change_pct: number }[])
+      .map((i) => [i.ticker, i]),
+  );
+  const portfolioIndexPositions = new Map(
+    (portfolioData?.items ?? [])
+      .filter((it) => INDEX_TICKERS.includes(it.ticker))
+      .map((it) => [it.ticker, it]),
+  );
+
   const advPct = breadth.total > 0 ? (breadth.advances  / breadth.total) * 100 : 0;
   const decPct = breadth.total > 0 ? (breadth.declines  / breadth.total) * 100 : 0;
   const unchPct = Math.max(0, 100 - advPct - decPct);
@@ -174,6 +210,82 @@ function OverviewTab() {
           <span className="text-positive font-semibold">▲ {breadth.advances} Advances</span>
           <span className="text-muted">{breadth.unchanged} Unchanged</span>
           <span className="text-negative font-semibold">▼ {breadth.declines} Declines</span>
+        </div>
+      </div>
+
+      {/* Major Indexes */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-muted uppercase tracking-widest">Major Indexes</h3>
+          <Link to="/markets" className="text-[10px] text-accent hover:underline">View & invest →</Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {INDEX_TICKERS.map((t) => {
+            const quote = indexQuotes.get(t);
+            const owned = portfolioIndexPositions.get(t);
+            const positive = (quote?.change_pct ?? 0) >= 0;
+            const currentValue = owned && quote ? owned.shares * quote.price : null;
+            const cost = owned ? owned.shares * owned.avg_buy_price : null;
+            const pnl = currentValue != null && cost != null ? currentValue - cost : null;
+            const pnlPct = pnl != null && cost && cost > 0 ? (pnl / cost) * 100 : null;
+            return (
+              <Link
+                key={t}
+                to="/markets"
+                className={clsx(
+                  "rounded-xl border p-4 flex flex-col gap-2 hover:border-accent/50 hover:bg-surface-hover transition-colors",
+                  owned ? "bg-accent/5 border-accent/40" : "bg-surface border-border"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-muted mb-0.5">{INDEX_META[t]}</div>
+                    <div className="text-base font-bold text-white flex items-center gap-1.5">
+                      {t}
+                      {owned && (
+                        <span className="text-[9px] uppercase tracking-widest text-accent bg-accent/15 rounded px-1.5 py-0.5">
+                          Owned
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {quote ? (
+                    <div className={clsx(
+                      "text-xs font-semibold px-2 py-1 rounded-full",
+                      positive ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative"
+                    )}>
+                      {positive ? "+" : ""}{quote.change_pct.toFixed(2)}%
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
+                  )}
+                </div>
+                <div className="flex items-end justify-between">
+                  <div className="text-sm text-white font-medium">
+                    {quote ? `$${quote.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                  </div>
+                  {owned && currentValue != null && (
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted">
+                        {owned.shares.toLocaleString("en-US", { maximumFractionDigits: 4 })} shares
+                      </div>
+                      <div className="text-[11px] text-white font-semibold">
+                        ${currentValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {owned && pnl != null && pnlPct != null && (
+                  <div className={clsx(
+                    "text-[11px] font-medium",
+                    pnl >= 0 ? "text-positive" : "text-negative"
+                  )}>
+                    {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} ({pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                  </div>
+                )}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
