@@ -620,8 +620,19 @@ def _fetch_etf_performance(ticker: str) -> dict:
     daily_bars = df_to_bars(hist_1y)
     n = len(daily_bars)
 
-    # 1D: open of first intraday bar vs close of last (today open→now)
-    if intraday_bars:
+    # 1D: previous close → current price (matches the Dashboard IndexCard
+    # which uses fast_info.previous_close via _fetch_quote).  The previous
+    # close is the second-to-last daily bar's close when the last daily bar
+    # is today's session; otherwise fall back to the last daily close.
+    prev_close = None
+    if n >= 2:
+        prev_close = daily_bars[-2]["c"]
+    elif n == 1:
+        prev_close = daily_bars[0]["c"]
+
+    if intraday_bars and prev_close is not None:
+        p1d = period_stats(prev_close, intraday_bars[-1]["c"], intraday_bars)
+    elif intraday_bars:
         p1d = period_stats(intraday_bars[0]["o"], intraday_bars[-1]["c"], intraday_bars)
     else:
         p1d = {"change_pct": None, "change_abs": None, "high": None, "low": None, "bars": []}
